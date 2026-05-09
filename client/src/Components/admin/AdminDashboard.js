@@ -20,6 +20,13 @@ import Message from './Message';
 import AdminProfiles from './AdminProfiles';
 import Analytics from './Analytics';
 
+// Import Leaflet and heatmap libraries
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import 'leaflet.heat';
+import 'leaflet-fullscreen/dist/Leaflet.fullscreen.js';
+import 'leaflet-fullscreen/dist/leaflet.fullscreen.css';
+
 // Register ChartJS components
 ChartJS.register(
   CategoryScale,
@@ -33,13 +40,6 @@ ChartJS.register(
   LineElement,
   Filler
 );
-
-// Import Leaflet and heatmap libraries
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import 'leaflet.heat';
-import 'leaflet-fullscreen/dist/Leaflet.fullscreen.js';
-import 'leaflet-fullscreen/dist/leaflet.fullscreen.css';
 
 // Fix for default marker icons in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
