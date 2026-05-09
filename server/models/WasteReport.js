@@ -21,14 +21,15 @@ const wasteReportSchema = new mongoose.Schema({
   detectedObjects: [{
     label: String,
     confidence: Number,
-    box: [Number], // [x1, y1, x2, y2]
+    category: String,
+    box: [Number], // [x1, y1, x2, y2] normalized
     material: String,
     area_percentage: Number
   }],
   classification: {
     type: String,
     required: true,
-    enum: ['Recycling', 'organic', 'general_waste', 'hazardous', 'unknown']
+    enum: ['Recyclable', 'Special Waste', 'Biodegradable', 'Residual / Non-Recyclable']
   },
   classificationConfidence: {
     type: Number,
@@ -37,14 +38,18 @@ const wasteReportSchema = new mongoose.Schema({
     max: 1
   },
   wasteComposition: {
-    type: Map,
-    of: Number // percentage values
+    special_waste:  { type: Number, default: 0 },
+    recyclable:     { type: Number, default: 0 },
+    residual:       { type: Number, default: 0 },
+    biodegradable:  { type: Number, default: 0 }
   },
   materialBreakdown: {
     type: Map,
-    of: Number // percentage values
+    of: Number
   },
   recyclingTips: [String],
+
+  // ── Location ──────────────────────────────────────────────────────────────
   location: {
     address: String,
     coordinates: {
@@ -53,6 +58,21 @@ const wasteReportSchema = new mongoose.Schema({
     },
     timestamp: String
   },
+
+
+  assignedBarangay: {
+    type: String,
+    enum: ['south_signal', 'central_signal', 'tup_taguig'],
+    required: true
+  },
+  // Human-readable label shown in the UI
+  assignedBarangayLabel: {
+    type: String,
+    enum: ['South Signal, Taguig', 'Central Signal, Taguig', 'TUP Taguig'],
+    required: true
+  },
+
+  // ── Status & admin fields ─────────────────────────────────────────────────
   status: {
     type: String,
     enum: ['pending', 'processed', 'recycled', 'disposed', 'rejected'],
@@ -62,6 +82,18 @@ const wasteReportSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  userMessage: {
+    type: String,
+    default: ''
+  },
+  deviceUsed: {
+    type: String,
+    default: ''
+  },
+  isDemo: {
+    type: Boolean,
+    default: false
+  },
   scanDate: {
     type: Date,
     default: Date.now
@@ -70,9 +102,11 @@ const wasteReportSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for better query performance
+// ── Indexes ───────────────────────────────────────────────────────────────
 wasteReportSchema.index({ user: 1, scanDate: -1 });
 wasteReportSchema.index({ status: 1 });
 wasteReportSchema.index({ classification: 1 });
+wasteReportSchema.index({ assignedBarangay: 1 });
+wasteReportSchema.index({ assignedBarangay: 1, status: 1 });
 
 module.exports = mongoose.model('WasteReport', wasteReportSchema);

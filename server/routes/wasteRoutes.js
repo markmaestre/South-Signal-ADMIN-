@@ -3,8 +3,39 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const WasteReport = require('../models/WasteReport');
 const Notification = require('../models/Notification');
+const User = require('../models/User');
 const auth = require('../middleware/auth');
 const cloudinary = require('cloudinary').v2;
+
+// Helper function to get barangay filter based on admin role
+const getBarangayFilterFromRole = (role, assignedBarangay = null) => {
+  switch (role) {
+    case 'southadmin':
+      return { assignedBarangay: 'south_signal' };
+    case 'centraladmin':
+      return { assignedBarangay: 'central_signal' };
+    case 'admin':
+      // Super admin sees all - no filter
+      return null;
+    default:
+      return null;
+  }
+};
+
+// Helper to check if admin has access to a specific barangay
+const hasBarangayAccess = (adminRole, reportBarangay) => {
+  if (adminRole === 'admin') return true;
+  if (adminRole === 'southadmin') return reportBarangay === 'south_signal';
+  if (adminRole === 'centraladmin') return reportBarangay === 'central_signal';
+  return false;
+};
+
+// Helper to check if user belongs to a specific barangay
+async function getUserBarangay(userId) {
+  const user = await User.findById(userId);
+  if (!user) return null;
+  return user.assignedBarangay;
+}
 
 // @desc    Create waste detection report with image upload
 // @route   POST /api/waste-reports/detect
@@ -24,6 +55,22 @@ router.post('/detect',
   async (req, res) => {
     try {
       console.log('📨 Received waste detection request from user:', req.user.id);
+      
+      // Get user's assigned barangay
+      const userBarangay = await getUserBarangay(req.user.id);
+      
+      let assignedBarangay = 'south_signal'; // default
+      let assignedBarangayLabel = 'South Signal, Taguig';
+      
+      if (userBarangay === 'central_signal') {
+        assignedBarangay = 'central_signal';
+        assignedBarangayLabel = 'Central Signal, Taguig';
+      } else if (userBarangay === 'tup_taguig') {
+        assignedBarangay = 'tup_taguig';
+        assignedBarangayLabel = 'TUP Taguig';
+      }
+      
+      console.log(`📍 User belongs to: ${assignedBarangayLabel}`);
       
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -46,17 +93,9 @@ router.post('/detect',
         scan_date
       } = req.body;
 
-      console.log('📊 Processing report data:', {
-        classification,
-        confidence: classification_confidence,
-        objectsCount: detected_objects.length,
-        hasImage: !!image
-      });
-
       // Convert confidence if it's in percentage format
       let finalConfidence = parseFloat(classification_confidence);
       if (finalConfidence > 1) {
-        console.log('🔄 Converting confidence from percentage to decimal');
         finalConfidence = finalConfidence / 100;
       }
 
@@ -73,8 +112,9 @@ router.post('/detect',
       if (image && image.startsWith('data:image')) {
         try {
           console.log('☁️ Uploading image to Cloudinary...');
+          const folder = `waste-reports-${assignedBarangay}`;
           const uploadResponse = await cloudinary.uploader.upload(image, {
-            folder: 'waste-reports',
+            folder: folder,
             resource_type: 'image',
             quality: 'auto:good',
             fetch_format: 'auto'
@@ -107,7 +147,9 @@ router.post('/detect',
           materialBreakdown: material_breakdown,
           recyclingTips: recycling_tips,
           location,
-          status: 'pending'
+          status: 'pending',
+          assignedBarangay: assignedBarangay,
+          assignedBarangayLabel: assignedBarangayLabel
         };
 
         if (scan_date) {
@@ -117,13 +159,13 @@ router.post('/detect',
         const report = new WasteReport(reportData);
         await report.save({ session });
 
-        console.log('✅ Waste report saved to database:', report._id);
+        console.log(`✅ Waste report saved to database: ${report._id} - Barangay: ${assignedBarangayLabel}`);
 
         // Create notification
         const notification = new Notification({
           user: req.user.id,
           title: 'Waste Report Created',
-          message: `Your waste detection report has been created successfully. Classification: ${classification}`,
+          message: `Your waste detection report for ${assignedBarangayLabel} has been created successfully. Classification: ${classification}`,
           type: 'report_created',
           relatedReport: report._id
         });
@@ -180,14 +222,19 @@ router.post('/detect',
   }
 );
 
-// @desc    Get user's own reports
+// @desc    Get user's own reports (filtered by their barangay)
 // @route   GET /api/waste-reports/my-reports
 // @access  Private
 router.get('/my-reports', auth, async (req, res) => {
   try {
-    const { page = 1, limit = 10, status } = req.query;
+    const userBarangay = await getUserBarangay(req.user.id);
     
-    const query = { user: req.user.id };
+    const query = { 
+      user: req.user.id,
+      assignedBarangay: userBarangay
+    };
+    
+    const { page = 1, limit = 10, status } = req.query;
     if (status && status !== 'all') {
       query.status = status;
     }
@@ -206,7 +253,8 @@ router.get('/my-reports', auth, async (req, res) => {
       reports,
       totalPages: Math.ceil(total / limit),
       currentPage: parseInt(page),
-      total
+      total,
+      barangay: userBarangay
     });
   } catch (error) {
     console.error('Get reports error:', error);
@@ -217,7 +265,7 @@ router.get('/my-reports', auth, async (req, res) => {
   }
 });
 
-// @desc    Get single report by ID
+// @desc    Get single report by ID (with access control)
 // @route   GET /api/waste-reports/:id
 // @access  Private
 router.get('/:id', auth, async (req, res) => {
@@ -232,18 +280,29 @@ router.get('/:id', auth, async (req, res) => {
       });
     }
 
-    // Check if user owns the report or is admin
-    if (report.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        success: false,
-        error: 'Access denied' 
-      });
+    // Check if user owns the report
+    if (report.user._id.toString() === req.user.id) {
+      return res.json({ success: true, report });
     }
 
-    res.json({
-      success: true,
-      report
+    // For admin access - check role-based permissions
+    if (req.user.role === 'admin') {
+      return res.json({ success: true, report });
+    }
+    
+    if (req.user.role === 'southadmin' && report.assignedBarangay === 'south_signal') {
+      return res.json({ success: true, report });
+    }
+    
+    if (req.user.role === 'centraladmin' && report.assignedBarangay === 'central_signal') {
+      return res.json({ success: true, report });
+    }
+
+    return res.status(403).json({ 
+      success: false,
+      error: 'Access denied' 
     });
+
   } catch (error) {
     console.error('Get report error:', error);
     res.status(500).json({ 
@@ -253,7 +312,7 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// @desc    Get all reports (admin only) - FIXED VERSION
+// @desc    Get all reports (admin only - filtered by role)
 // @route   GET /api/waste-reports
 // @access  Private/Admin
 router.get('/', auth, async (req, res) => {
@@ -261,9 +320,9 @@ router.get('/', auth, async (req, res) => {
     console.log('🔐 Admin access check - User role:', req.user.role);
     console.log('🔐 User ID:', req.user.id);
     
-    // FIX: Check if user is admin
-    if (req.user.role !== 'admin') {
-      console.log('❌ Access denied - User is not admin');
+    // Check if user has admin role
+    if (!['admin', 'southadmin', 'centraladmin'].includes(req.user.role)) {
+      console.log('❌ Access denied - User is not an admin');
       return res.status(403).json({ 
         success: false,
         error: 'Access denied. Admin privileges required.' 
@@ -284,7 +343,16 @@ router.get('/', auth, async (req, res) => {
       page, limit, status, user, classification, startDate, endDate 
     });
     
-    const query = {};
+    // Build query based on admin role
+    let query = {};
+    const barangayFilter = getBarangayFilterFromRole(req.user.role, req.user.assignedBarangay);
+    
+    if (barangayFilter) {
+      query = { ...barangayFilter };
+      console.log(`🔍 Filtering for: ${req.user.role} - ${JSON.stringify(barangayFilter)}`);
+    } else {
+      console.log('🔍 Super admin - showing all barangays');
+    }
     
     // Status filter
     if (status && status !== 'all') {
@@ -308,7 +376,6 @@ router.get('/', auth, async (req, res) => {
         query.scanDate.$gte = new Date(startDate);
       }
       if (endDate) {
-        // Set end date to end of day
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
         query.scanDate.$lte = end;
@@ -326,7 +393,10 @@ router.get('/', auth, async (req, res) => {
 
     const total = await WasteReport.countDocuments(query);
 
-    console.log(`✅ Admin fetched ${reports.length} reports out of ${total} total`);
+    // Get unique barangays in results
+    const barangays = [...new Set(reports.map(r => r.assignedBarangayLabel).filter(Boolean))];
+
+    console.log(`✅ Admin fetched ${reports.length} reports`);
 
     res.json({
       success: true,
@@ -340,7 +410,9 @@ router.get('/', auth, async (req, res) => {
         classification: classification || 'all',
         startDate: startDate || '',
         endDate: endDate || ''
-      }
+      },
+      adminRole: req.user.role,
+      barangays: barangays
     });
 
   } catch (error) {
@@ -353,7 +425,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// @desc    Update report status
+// @desc    Update report status (with access control)
 // @route   PUT /api/waste-reports/:id/status
 // @access  Private
 router.put('/:id/status', 
@@ -384,11 +456,23 @@ router.put('/:id/status',
         });
       }
 
-      // Check permissions
-      if (report.user.toString() !== req.user.id && req.user.role !== 'admin') {
+      // Check access based on role
+      let hasAccess = false;
+      
+      if (req.user.role === 'admin') {
+        hasAccess = true; // Super admin can update any
+      } else if (req.user.role === 'southadmin' && report.assignedBarangay === 'south_signal') {
+        hasAccess = true;
+      } else if (req.user.role === 'centraladmin' && report.assignedBarangay === 'central_signal') {
+        hasAccess = true;
+      } else if (report.user.toString() === req.user.id) {
+        hasAccess = true; // User can update their own
+      }
+      
+      if (!hasAccess) {
         return res.status(403).json({ 
           success: false,
-          error: 'Access denied' 
+          error: 'Access denied - You do not have permission to update this report' 
         });
       }
 
@@ -399,15 +483,15 @@ router.put('/:id/status',
         const oldStatus = report.status;
         report.status = status;
         
-        if (adminNotes && req.user.role === 'admin') {
+        if (adminNotes && (req.user.role !== 'user')) {
           report.adminNotes = adminNotes;
         }
         
         await report.save({ session });
 
         // Create notification
-        const notificationMessage = req.user.role === 'admin' 
-          ? `Admin updated your report status from ${oldStatus} to: ${status}. ${adminNotes ? `Notes: ${adminNotes}` : ''}`
+        const notificationMessage = req.user.role !== 'user'
+          ? `${req.user.role === 'admin' ? 'Admin' : req.user.role === 'southadmin' ? 'South Signal Admin' : 'Central Signal Admin'} updated your report status from ${oldStatus} to: ${status}. ${adminNotes ? `Notes: ${adminNotes}` : ''}`
           : `Your report status updated to: ${status}`;
 
         const notification = new Notification({
@@ -447,7 +531,7 @@ router.put('/:id/status',
   }
 );
 
-// @desc    Delete waste report
+// @desc    Delete waste report (with access control)
 // @route   DELETE /api/waste-reports/:id
 // @access  Private
 router.delete('/:id', auth, async (req, res) => {
@@ -461,8 +545,20 @@ router.delete('/:id', auth, async (req, res) => {
       });
     }
 
-    // Check permissions
-    if (report.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    // Check access based on role
+    let hasAccess = false;
+    
+    if (req.user.role === 'admin') {
+      hasAccess = true;
+    } else if (req.user.role === 'southadmin' && report.assignedBarangay === 'south_signal') {
+      hasAccess = true;
+    } else if (req.user.role === 'centraladmin' && report.assignedBarangay === 'central_signal') {
+      hasAccess = true;
+    } else if (report.user.toString() === req.user.id) {
+      hasAccess = true;
+    }
+    
+    if (!hasAccess) {
       return res.status(403).json({ 
         success: false,
         error: 'Access denied' 
@@ -493,28 +589,37 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
-// @desc    Get comprehensive waste reports statistics
+// @desc    Get comprehensive waste reports statistics (filtered by role)
 // @route   GET /api/waste-reports/stats/comprehensive
 // @access  Private/Admin
 router.get('/stats/comprehensive', auth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!['admin', 'southadmin', 'centraladmin'].includes(req.user.role)) {
       return res.status(403).json({ 
         success: false,
         error: 'Access denied' 
       });
     }
 
+    // Build base filter based on role
+    let baseFilter = {};
+    const barangayFilter = getBarangayFilterFromRole(req.user.role, req.user.assignedBarangay);
+    
+    if (barangayFilter) {
+      baseFilter = { ...barangayFilter };
+    }
+
     // Basic counts
-    const totalReports = await WasteReport.countDocuments();
-    const pendingReports = await WasteReport.countDocuments({ status: 'pending' });
-    const processedReports = await WasteReport.countDocuments({ status: 'processed' });
-    const recycledReports = await WasteReport.countDocuments({ status: 'recycled' });
-    const disposedReports = await WasteReport.countDocuments({ status: 'disposed' });
-    const rejectedReports = await WasteReport.countDocuments({ status: 'rejected' });
+    const totalReports = await WasteReport.countDocuments(baseFilter);
+    const pendingReports = await WasteReport.countDocuments({ ...baseFilter, status: 'pending' });
+    const processedReports = await WasteReport.countDocuments({ ...baseFilter, status: 'processed' });
+    const recycledReports = await WasteReport.countDocuments({ ...baseFilter, status: 'recycled' });
+    const disposedReports = await WasteReport.countDocuments({ ...baseFilter, status: 'disposed' });
+    const rejectedReports = await WasteReport.countDocuments({ ...baseFilter, status: 'rejected' });
 
     // Classification breakdown with percentages
     const classificationStats = await WasteReport.aggregate([
+      { $match: baseFilter },
       {
         $group: {
           _id: '$classification',
@@ -527,7 +632,7 @@ router.get('/stats/comprehensive', auth, async (req, res) => {
           classification: '$_id',
           count: 1,
           avgConfidence: 1,
-          percentage: { $multiply: [{ $divide: ['$count', totalReports] }, 100] }
+          percentage: totalReports > 0 ? { $multiply: [{ $divide: ['$count', totalReports] }, 100] } : 0
         }
       },
       { $sort: { count: -1 } }
@@ -535,14 +640,14 @@ router.get('/stats/comprehensive', auth, async (req, res) => {
 
     // Monthly trends
     const monthlyStats = await WasteReport.aggregate([
+      { $match: baseFilter },
       {
         $group: {
           _id: {
             year: { $year: '$scanDate' },
             month: { $month: '$scanDate' }
           },
-          count: { $sum: 1 },
-          classifications: { $push: '$classification' }
+          count: { $sum: 1 }
         }
       },
       {
@@ -554,16 +659,16 @@ router.get('/stats/comprehensive', auth, async (req, res) => {
               { $toString: { $cond: [{ $lt: ['$_id.month', 10] }, { $concat: ['0', { $toString: '$_id.month' }] }, { $toString: '$_id.month' }] } }
             ]
           },
-          count: 1,
-          topClassification: { $arrayElemAt: ['$classifications', 0] } // Simplified top classification
+          count: 1
         }
       },
       { $sort: { '_id.year': 1, '_id.month': 1 } },
-      { $limit: 12 } // Last 12 months
+      { $limit: 12 }
     ]);
 
     // User activity stats
     const userStats = await WasteReport.aggregate([
+      { $match: baseFilter },
       {
         $group: {
           _id: '$user',
@@ -591,11 +696,12 @@ router.get('/stats/comprehensive', auth, async (req, res) => {
         }
       },
       { $sort: { reportCount: -1 } },
-      { $limit: 10 } // Top 10 users
+      { $limit: 10 }
     ]);
 
-    // Material breakdown from detected objects
+    // Material breakdown
     const materialStats = await WasteReport.aggregate([
+      { $match: baseFilter },
       { $unwind: '$detectedObjects' },
       {
         $group: {
@@ -609,60 +715,17 @@ router.get('/stats/comprehensive', auth, async (req, res) => {
           material: '$_id',
           count: 1,
           avgConfidence: 1,
-          percentage: { $multiply: [{ $divide: ['$count', totalReports] }, 100] }
+          percentage: totalReports > 0 ? { $multiply: [{ $divide: ['$count', totalReports] }, 100] } : 0
         }
       },
       { $sort: { count: -1 } },
       { $match: { material: { $ne: null, $ne: '' } } }
     ]);
 
-    // Status trends over time
-    const statusTrends = await WasteReport.aggregate([
-      {
-        $group: {
-          _id: {
-            status: '$status',
-            year: { $year: '$scanDate' },
-            month: { $month: '$scanDate' }
-          },
-          count: { $sum: 1 }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            year: '$_id.year',
-            month: '$_id.month'
-          },
-          statuses: {
-            $push: {
-              status: '$_id.status',
-              count: '$count'
-            }
-          }
-        }
-      },
-      { $sort: { '_id.year': 1, '_id.month': 1 } },
-      { $limit: 6 } // Last 6 months
-    ]);
-
-    // Confidence distribution
-    const confidenceStats = await WasteReport.aggregate([
-      {
-        $bucket: {
-          groupBy: { $multiply: ['$classificationConfidence', 100] },
-          boundaries: [0, 50, 70, 85, 95, 100],
-          default: 'other',
-          output: {
-            count: { $sum: 1 },
-            reports: { $push: { classification: '$classification', confidence: '$classificationConfidence' } }
-          }
-        }
-      }
-    ]);
-
     res.json({
       success: true,
+      adminRole: req.user.role,
+      barangayFilter: barangayFilter ? Object.values(barangayFilter)[0] : 'all',
       stats: {
         overview: {
           total: totalReports,
@@ -676,8 +739,6 @@ router.get('/stats/comprehensive', auth, async (req, res) => {
         monthlyTrends: monthlyStats,
         userActivity: userStats,
         materialBreakdown: materialStats,
-        statusTrends: statusTrends,
-        confidenceDistribution: confidenceStats,
         summary: {
           mostCommonClassification: classificationStats[0]?.classification || 'None',
           topMaterial: materialStats[0]?.material || 'None',
@@ -695,27 +756,34 @@ router.get('/stats/comprehensive', auth, async (req, res) => {
   }
 });
 
-// @desc    Get quick overview statistics
+// @desc    Get quick overview statistics (filtered by role)
 // @route   GET /api/waste-reports/stats/overview
 // @access  Private/Admin
 router.get('/stats/overview', auth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!['admin', 'southadmin', 'centraladmin'].includes(req.user.role)) {
       return res.status(403).json({ 
         success: false,
         error: 'Access denied' 
       });
     }
 
-    const totalReports = await WasteReport.countDocuments();
-    const pendingReports = await WasteReport.countDocuments({ status: 'pending' });
-    const processedReports = await WasteReport.countDocuments({ status: 'processed' });
-    const recycledReports = await WasteReport.countDocuments({ status: 'recycled' });
-    const disposedReports = await WasteReport.countDocuments({ status: 'disposed' });
-    const rejectedReports = await WasteReport.countDocuments({ status: 'rejected' });
+    let baseFilter = {};
+    const barangayFilter = getBarangayFilterFromRole(req.user.role, req.user.assignedBarangay);
+    
+    if (barangayFilter) {
+      baseFilter = { ...barangayFilter };
+    }
 
-    // Classification breakdown
+    const totalReports = await WasteReport.countDocuments(baseFilter);
+    const pendingReports = await WasteReport.countDocuments({ ...baseFilter, status: 'pending' });
+    const processedReports = await WasteReport.countDocuments({ ...baseFilter, status: 'processed' });
+    const recycledReports = await WasteReport.countDocuments({ ...baseFilter, status: 'recycled' });
+    const disposedReports = await WasteReport.countDocuments({ ...baseFilter, status: 'disposed' });
+    const rejectedReports = await WasteReport.countDocuments({ ...baseFilter, status: 'rejected' });
+
     const classificationStats = await WasteReport.aggregate([
+      { $match: baseFilter },
       {
         $group: {
           _id: '$classification',
@@ -729,6 +797,7 @@ router.get('/stats/overview', auth, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todaysReports = await WasteReport.countDocuments({
+      ...baseFilter,
       scanDate: { $gte: today }
     });
 
@@ -737,11 +806,14 @@ router.get('/stats/overview', auth, async (req, res) => {
     startOfWeek.setDate(today.getDate() - today.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
     const thisWeeksReports = await WasteReport.countDocuments({
+      ...baseFilter,
       scanDate: { $gte: startOfWeek }
     });
 
     res.json({
       success: true,
+      adminRole: req.user.role,
+      barangayFilter: barangayFilter ? Object.values(barangayFilter)[0] : 'all',
       stats: {
         total: totalReports,
         pending: pendingReports,

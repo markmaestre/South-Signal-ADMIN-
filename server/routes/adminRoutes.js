@@ -3,8 +3,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
-const Admin = require('../models/admin'); // Adjust path to your Admin model
-const auth = require('../middleware/auth'); // Adjust path to your auth middleware
+const Admin = require('../models/admin');
+const auth = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -20,7 +20,7 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 5 * 1024 * 1024,
   },
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -31,10 +31,38 @@ const upload = multer({
   },
 });
 
+// Add this helper function at the top after imports
+const getBarangayFilterFromRole = (role, assignedBarangay = null) => {
+  switch (role) {
+    case 'southadmin':
+      return { assignedBarangay: 'south_signal', assignedBarangayLabel: 'South Signal, Taguig' };
+    case 'centraladmin':
+      return { assignedBarangay: 'central_signal', assignedBarangayLabel: 'Central Signal, Taguig' };
+    case 'admin':
+      // Super admin sees all - no filter
+      return null;
+    default:
+      return null;
+  }
+};
+
+// Helper to check if admin has access to a specific barangay
+const hasBarangayAccess = (adminRole, reportBarangay) => {
+  if (adminRole === 'admin') return true; // Super admin sees all
+  if (adminRole === 'southadmin') return reportBarangay === 'south_signal';
+  if (adminRole === 'centraladmin') return reportBarangay === 'central_signal';
+  return false;
+};
+
 // Register Admin
 router.post('/register', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role = 'admin' } = req.body;
+
+    // Validate role
+    if (!['admin', 'southadmin', 'centraladmin'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role specified' });
+    }
 
     // Check if admin already exists
     const existingAdmin = await Admin.findOne({ email });
@@ -46,11 +74,15 @@ router.post('/register', async (req, res) => {
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
+    // Get barangay info based on role
+    const barangayInfo = getBarangayFromRole(role);
+
     // Create new admin
     const newAdmin = new Admin({
       email,
       password: hashedPassword,
-      role: 'admin',
+      role,
+      ...barangayInfo,
       lastLogin: new Date()
     });
 
@@ -61,7 +93,9 @@ router.post('/register', async (req, res) => {
       { 
         userId: newAdmin._id, 
         email: newAdmin.email,
-        role: newAdmin.role 
+        role: newAdmin.role,
+        assignedBarangay: newAdmin.assignedBarangay,
+        assignedBarangayLabel: newAdmin.assignedBarangayLabel
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
@@ -75,7 +109,9 @@ router.post('/register', async (req, res) => {
         email: newAdmin.email,
         role: newAdmin.role,
         profile: newAdmin.profile,
-        lastLogin: newAdmin.lastLogin
+        lastLogin: newAdmin.lastLogin,
+        assignedBarangay: newAdmin.assignedBarangay,
+        assignedBarangayLabel: newAdmin.assignedBarangayLabel
       }
     });
 
@@ -111,7 +147,9 @@ router.post('/login', async (req, res) => {
       { 
         userId: admin._id, 
         email: admin.email,
-        role: admin.role 
+        role: admin.role,
+        assignedBarangay: admin.assignedBarangay,
+        assignedBarangayLabel: admin.assignedBarangayLabel
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
@@ -125,7 +163,9 @@ router.post('/login', async (req, res) => {
         email: admin.email,
         role: admin.role,
         profile: admin.profile,
-        lastLogin: admin.lastLogin
+        lastLogin: admin.lastLogin,
+        assignedBarangay: admin.assignedBarangay,
+        assignedBarangayLabel: admin.assignedBarangayLabel
       }
     });
 
@@ -149,7 +189,9 @@ router.get('/profile', auth, async (req, res) => {
         email: admin.email,
         role: admin.role,
         profile: admin.profile,
-        lastLogin: admin.lastLogin
+        lastLogin: admin.lastLogin,
+        assignedBarangay: admin.assignedBarangay,
+        assignedBarangayLabel: admin.assignedBarangayLabel
       }
     });
 
@@ -171,7 +213,6 @@ router.put('/profile', auth, upload.single('profile'), async (req, res) => {
 
     // Update email if provided
     if (email && email !== admin.email) {
-      // Check if email already exists
       const emailExists = await Admin.findOne({ email, _id: { $ne: admin._id } });
       if (emailExists) {
         return res.status(400).json({ message: 'Email already exists' });
@@ -187,7 +228,6 @@ router.put('/profile', auth, upload.single('profile'), async (req, res) => {
 
     // Handle profile picture upload
     if (req.file) {
-      // Upload to Cloudinary
       const result = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
@@ -212,7 +252,6 @@ router.put('/profile', auth, upload.single('profile'), async (req, res) => {
 
     await admin.save();
 
-    // Return updated admin (excluding password)
     const updatedAdmin = await Admin.findById(admin._id).select('-password');
 
     res.json({
@@ -222,7 +261,9 @@ router.put('/profile', auth, upload.single('profile'), async (req, res) => {
         email: updatedAdmin.email,
         role: updatedAdmin.role,
         profile: updatedAdmin.profile,
-        lastLogin: updatedAdmin.lastLogin
+        lastLogin: updatedAdmin.lastLogin,
+        assignedBarangay: updatedAdmin.assignedBarangay,
+        assignedBarangayLabel: updatedAdmin.assignedBarangayLabel
       }
     });
 
@@ -241,7 +282,6 @@ router.delete('/profile/picture', auth, async (req, res) => {
       return res.status(404).json({ message: 'Admin not found' });
     }
 
-    // Remove profile picture URL from database
     admin.profile = undefined;
     await admin.save();
 
@@ -252,13 +292,30 @@ router.delete('/profile/picture', auth, async (req, res) => {
         email: admin.email,
         role: admin.role,
         profile: admin.profile,
-        lastLogin: admin.lastLogin
+        lastLogin: admin.lastLogin,
+        assignedBarangay: admin.assignedBarangay,
+        assignedBarangayLabel: admin.assignedBarangayLabel
       }
     });
 
   } catch (error) {
     console.error('Profile picture delete error:', error);
     res.status(500).json({ message: 'Server error removing profile picture', error: error.message });
+  }
+});
+
+// Get all admins (super admin only)
+router.get('/all', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Super admin only.' });
+    }
+
+    const admins = await Admin.find().select('-password');
+    res.json({ admins });
+  } catch (error) {
+    console.error('Get admins error:', error);
+    res.status(500).json({ message: 'Server error fetching admins' });
   }
 });
 
