@@ -1,3 +1,4 @@
+// In your admin routes file (admin.js)
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -30,6 +31,18 @@ const upload = multer({
     }
   },
 });
+
+// Helper function to get barangay from role
+const getBarangayFromRole = (role) => {
+  switch (role) {
+    case 'southadmin':
+      return { assignedBarangay: 'south_signal', assignedBarangayLabel: 'South Signal, Taguig' };
+    case 'centraladmin':
+      return { assignedBarangay: 'central_signal', assignedBarangayLabel: 'Central Signal, Taguig' };
+    default:
+      return { assignedBarangay: null, assignedBarangayLabel: null };
+  }
+};
 
 // Add this helper function at the top after imports
 const getBarangayFilterFromRole = (role, assignedBarangay = null) => {
@@ -201,9 +214,13 @@ router.get('/profile', auth, async (req, res) => {
   }
 });
 
-// Update Admin Profile
+// Update Admin Profile - FIXED VERSION
 router.put('/profile', auth, upload.single('profile'), async (req, res) => {
   try {
+    console.log('Update profile request received');
+    console.log('Request body:', req.body);
+    console.log('Request file:', req.file);
+    
     const { email, password } = req.body;
     const admin = await Admin.findById(req.user.userId);
 
@@ -221,13 +238,14 @@ router.put('/profile', auth, upload.single('profile'), async (req, res) => {
     }
 
     // Update password if provided
-    if (password) {
+    if (password && password.trim() !== '') {
       const saltRounds = 10;
       admin.password = await bcrypt.hash(password, saltRounds);
     }
 
     // Handle profile picture upload
     if (req.file) {
+      console.log('Uploading to Cloudinary...');
       const result = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
@@ -248,6 +266,7 @@ router.put('/profile', auth, upload.single('profile'), async (req, res) => {
       });
 
       admin.profile = result.secure_url;
+      console.log('Upload successful:', result.secure_url);
     }
 
     await admin.save();
@@ -276,6 +295,8 @@ router.put('/profile', auth, upload.single('profile'), async (req, res) => {
 // Delete Admin Profile Picture
 router.delete('/profile/picture', auth, async (req, res) => {
   try {
+    console.log('Delete profile picture request received');
+    
     const admin = await Admin.findById(req.user.userId);
     
     if (!admin) {
@@ -317,6 +338,11 @@ router.get('/all', auth, async (req, res) => {
     console.error('Get admins error:', error);
     res.status(500).json({ message: 'Server error fetching admins' });
   }
+});
+
+// Add a test route to verify routing is working
+router.get('/test', (req, res) => {
+  res.json({ message: 'Admin routes are working!' });
 });
 
 module.exports = router;

@@ -1,487 +1,853 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import API_URL from '../Utils/Api';
-import '../css/message.css';
 
+/* ─── THEME TOKENS ───────────────────────────────────────────── */
+const light = {
+  bg:          '#F8FAFC',
+  surface:     '#FFFFFF',
+  surface2:    '#F1F5F9',
+  surface3:    '#E2E8F0',
+  border:      'rgba(15,23,42,0.08)',
+  border2:     'rgba(15,23,42,0.05)',
+  accent:      '#3B82F6',
+  accentBg:    'rgba(59,130,246,0.08)',
+  accentBdr:   'rgba(59,130,246,0.2)',
+  green:       '#16A34A',
+  greenBg:     'rgba(22,163,74,0.08)',
+  red:         '#DC2626',
+  redBg:       'rgba(220,38,38,0.08)',
+  amber:       '#D97706',
+  text:        '#0F172A',
+  textSub:     '#475569',
+  textMuted:   '#94A3B8',
+  shadow:      '0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)',
+  shadowMd:    '0 4px 12px rgba(15,23,42,0.08)',
+  sentBubble:  '#3B82F6',
+  sentText:    '#FFFFFF',
+  recvBubble:  '#FFFFFF',
+  recvText:    '#0F172A',
+};
+
+const dark = {
+  bg:          '#0D1117',
+  surface:     '#161B22',
+  surface2:    '#21262D',
+  surface3:    '#30363D',
+  border:      'rgba(255,255,255,0.08)',
+  border2:     'rgba(255,255,255,0.04)',
+  accent:      '#58A6FF',
+  accentBg:    'rgba(88,166,255,0.1)',
+  accentBdr:   'rgba(88,166,255,0.25)',
+  green:       '#3FB950',
+  greenBg:     'rgba(63,185,80,0.1)',
+  red:         '#F85149',
+  redBg:       'rgba(248,81,73,0.1)',
+  amber:       '#E3B341',
+  text:        '#E6EDF3',
+  textSub:     '#8B949E',
+  textMuted:   '#484F58',
+  shadow:      '0 1px 3px rgba(0,0,0,0.3)',
+  shadowMd:    '0 4px 16px rgba(0,0,0,0.4)',
+  sentBubble:  '#1F6FEB',
+  sentText:    '#FFFFFF',
+  recvBubble:  '#21262D',
+  recvText:    '#E6EDF3',
+};
+
+/* ─── CSS ────────────────────────────────────────────────────── */
+const buildCSS = (t) => `
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+.msg-root {
+  font-family: 'Geist', 'Inter', system-ui, sans-serif;
+  background: ${t.bg};
+  color: ${t.text};
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  min-height: 600px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid ${t.border};
+  box-shadow: ${t.shadowMd};
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: ${t.border}; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: ${t.textMuted}; }
+
+@keyframes slideUp   { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes fadeIn    { from { opacity:0; } to { opacity:1; } }
+@keyframes spin      { to { transform:rotate(360deg); } }
+@keyframes pulse     { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+@keyframes msgIn     { from { opacity:0; transform:scale(.95) translateY(4px); } to { opacity:1; transform:scale(1) translateY(0); } }
+@keyframes shimmer   { 0% { background-position:-400px 0; } 100% { background-position:400px 0; } }
+
+.conv-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 14px; cursor: pointer;
+  border-bottom: 1px solid ${t.border2};
+  transition: background 0.12s; position: relative;
+  animation: slideUp 0.25s ease both;
+}
+.conv-item:hover { background: ${t.surface2}; }
+.conv-item.active { background: ${t.accentBg}; }
+.conv-item.active::before {
+  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px;
+  width: 3px; background: ${t.accent}; border-radius: 0 3px 3px 0;
+}
+
+.msg-bubble { animation: msgIn 0.18s ease both; max-width: 100%; word-break: break-word; }
+.msg-row { display: flex; align-items: flex-end; gap: 7px; }
+.msg-row.sent  { align-self: flex-end; flex-direction: row-reverse; max-width: 68%; }
+.msg-row.recv  { align-self: flex-start; max-width: 68%; }
+.msg-row:hover .msg-del { opacity: 1 !important; }
+
+.msg-input {
+  flex: 1; background: ${t.surface2};
+  border: 1px solid ${t.border}; border-radius: 12px;
+  color: ${t.text}; font-family: inherit; font-size: 13.5px;
+  padding: 10px 14px; outline: none; transition: border-color 0.15s;
+  resize: none; line-height: 1.5;
+}
+.msg-input:focus { border-color: ${t.accent}; }
+.msg-input::placeholder { color: ${t.textMuted}; }
+
+.send-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 42px; height: 42px; background: ${t.accent};
+  border: none; border-radius: 11px; color: #fff; cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s; flex-shrink: 0;
+}
+.send-btn:hover:not(:disabled) { opacity: .88; transform: scale(1.04); }
+.send-btn:active:not(:disabled) { transform: scale(.96); }
+.send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.search-input {
+  width: 100%; background: ${t.surface2};
+  border: 1px solid ${t.border}; border-radius: 9px;
+  color: ${t.text}; font-family: inherit; font-size: 12.5px;
+  padding: 8px 11px 8px 32px; outline: none; transition: border-color 0.15s;
+}
+.search-input:focus { border-color: ${t.accent}; }
+.search-input::placeholder { color: ${t.textMuted}; }
+
+.badge {
+  font-size: 10px; font-weight: 600;
+  border-radius: 6px; padding: 2px 6px;
+  letter-spacing: 0.02em; white-space: nowrap;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, ${t.surface2} 25%, ${t.surface3} 50%, ${t.surface2} 75%);
+  background-size: 400px 100%; animation: shimmer 1.5s infinite; border-radius: 6px;
+}
+
+.icon-btn {
+  background: none; border: 1px solid ${t.border}; border-radius: 8px;
+  color: ${t.textSub}; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; padding: 7px; transition: all 0.12s;
+}
+.icon-btn:hover { background: ${t.surface2}; border-color: ${t.border}; color: ${t.text}; }
+
+.theme-btn {
+  background: ${t.surface2}; border: 1px solid ${t.border}; border-radius: 20px;
+  color: ${t.textSub}; cursor: pointer; display: flex; align-items: center;
+  gap: 5px; padding: 5px 10px; font-size: 12px; font-family: inherit;
+  transition: all 0.12s;
+}
+.theme-btn:hover { background: ${t.surface3}; color: ${t.text}; }
+
+.filter-select {
+  width: 100%; background: ${t.surface2}; border: 1px solid ${t.border};
+  border-radius: 8px; color: ${t.text}; font-family: inherit; font-size: 12px;
+  padding: 7px 10px; outline: none; cursor: pointer; margin-bottom: 10px;
+}
+`;
+
+/* ─── SVG ICONS ──────────────────────────────────────────────── */
+const Ic = ({ d, size = 16, color = 'currentColor', sw = 1.8, fill = 'none' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill}
+    stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"
+    style={{ display:'block', flexShrink:0 }}>
+    {Array.isArray(d) ? d.map((p,i) => <path key={i} d={p}/>) : <path d={d}/>}
+  </svg>
+);
+
+const P = {
+  msg:    "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
+  send:   "M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z",
+  search: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
+  trash:  ["M3 6h18","M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"],
+  check:  "M20 6L9 17l-5-5",
+  checks: ["M18 6L7 17l-4-4","M22 10l-5 5-2-2"],
+  x:      ["M18 6L6 18","M6 6l12 12"],
+  alert:  ["M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z","M12 9v4","M12 17h.01"],
+  pin:    ["M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z","M12 13a3 3 0 100-6 3 3 0 000 6z"],
+  spin:   "M21 12a9 9 0 11-6.2-8.6",
+  chevR:  "M9 18l6-6-6-6",
+  moon:   ["M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"],
+  sun:    ["M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42","M12 17a5 5 0 100-10 5 5 0 000 10z"],
+  refresh:"M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15",
+  inbox:  ["M22 12h-6l-2 3h-4l-2-3H2","M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"],
+};
+
+/* ─── HELPERS ────────────────────────────────────────────────── */
+const avatarPalette = ['#3B82F6','#8B5CF6','#EC4899','#14B8A6','#F59E0B','#22C55E','#EF4444','#06B6D4','#F97316','#6366F1'];
+const avatarColor = (id = '') => avatarPalette[parseInt(id.slice(-4)||'0',16) % avatarPalette.length];
+
+const displayName = (u) => {
+  if (!u) return 'Unknown';
+  return u.fullName || u.username || (u.email ? u.email.split('@')[0] : 'Unknown');
+};
+const initial = (u) => displayName(u).charAt(0).toUpperCase();
+
+const fmtRelative = (ts) => {
+  if (!ts) return '';
+  const m = Math.floor((Date.now() - new Date(ts)) / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return `${m}m`;
+  if (m < 1440) return `${Math.floor(m/60)}h`;
+  if (m < 10080) return `${Math.floor(m/1440)}d`;
+  return new Date(ts).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+};
+
+const fmtTime = (ts) => {
+  if (!ts) return '';
+  return new Date(ts).toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:true });
+};
+
+const roleMeta = (role, t) => ({
+  admin:        { label:'Super Admin',   bg:'rgba(245,158,11,0.12)',  color: t.amber },
+  southadmin:   { label:'South Admin',   bg: t.accentBg,              color: t.accent },
+  centraladmin: { label:'Central Admin', bg: t.greenBg,               color: t.green  },
+  user:         { label:'Resident',      bg:'rgba(139,92,246,0.1)',   color:'#8B5CF6' },
+}[role] || { label: role || 'Unknown', bg: t.surface2, color: t.textSub });
+
+/* ─── SUB COMPONENTS ─────────────────────────────────────────── */
+const Avatar = ({ user, size = 40, showOnline = false, t }) => (
+  <div style={{ width:size, height:size, borderRadius:'50%', background: avatarColor(user?._id||''),
+    display:'flex', alignItems:'center', justifyContent:'center',
+    fontWeight:700, fontSize:size*0.38, color:'#fff', flexShrink:0, position:'relative' }}>
+    {user?.profile
+      ? <img src={user.profile} alt="" style={{width:'100%',height:'100%',borderRadius:'50%',objectFit:'cover'}}/>
+      : initial(user)}
+    {showOnline && (
+      <div style={{ position:'absolute', bottom:0, right:0,
+        width:size*0.28, height:size*0.28, borderRadius:'50%',
+        background: t.green, border:`2px solid ${t.surface}` }}/>
+    )}
+  </div>
+);
+
+const ConvSkeleton = ({ t }) => (
+  <div style={{ padding:'11px 14px', display:'flex', gap:11, alignItems:'center' }}>
+    <div className="skeleton" style={{ width:44, height:44, borderRadius:'50%', flexShrink:0 }}/>
+    <div style={{ flex:1, display:'flex', flexDirection:'column', gap:7 }}>
+      <div className="skeleton" style={{ height:11, width:'55%' }}/>
+      <div className="skeleton" style={{ height:10, width:'75%' }}/>
+    </div>
+  </div>
+);
+
+/* ─── MAIN ───────────────────────────────────────────────────── */
 const Message = () => {
-  const [conversations, setConversations] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [newMessage, setNewMessage] = useState('');
-  const [users, setUsers] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [currentUser, setCurrentUser] = useState(null);
-  const messagesEndRef = useRef(null);
+  const [isDark, setIsDark]                 = useState(true);
+  const [conversations, setConversations]   = useState([]);
+  const [messages, setMessages]             = useState([]);
+  const [selectedUser, setSelectedUser]     = useState(null);
+  const [newMessage, setNewMessage]         = useState('');
+  const [searchQuery, setSearchQuery]       = useState('');
+  const [searchResults, setSearchResults]   = useState([]);
+  const [loadingConvs, setLoadingConvs]     = useState(true);
+  const [loadingMsgs, setLoadingMsgs]       = useState(false);
+  const [searchLoading, setSearchLoading]   = useState(false);
+  const [sending, setSending]               = useState(false);
+  const [error, setError]                   = useState('');
+  const [currentUser, setCurrentUser]       = useState(null);
+  const [unreadCount, setUnreadCount]       = useState(0);
+  const [filterBarangay, setFilterBarangay] = useState('all');
 
-  // Helper function to get authentication token
-  const getAuthToken = () => {
-    const possibleTokens = ['adminToken', 'userToken', 'token'];
-    for (const tokenKey of possibleTokens) {
-      const token = localStorage.getItem(tokenKey);
-      if (token) {
-        console.log('Using token from:', tokenKey);
-        return token;
-      }
-    }
-    return null;
+  const messagesEndRef  = useRef(null);
+  const selectedUserRef = useRef(null);
+  const inputRef        = useRef(null);
+  const navigate        = useNavigate();
+
+  const t = isDark ? dark : light;
+
+  useEffect(() => { selectedUserRef.current = selectedUser; }, [selectedUser]);
+
+  const token  = () => localStorage.getItem('adminToken');
+  const myId   = () => {
+    try { const d = JSON.parse(localStorage.getItem('adminData')||'{}'); return d._id||d.id; } catch { return null; }
   };
+  const hdrs = useCallback(() => ({
+    'Authorization': `Bearer ${token()}`,
+    'Content-Type': 'application/json',
+  }), []);
 
-  // Helper function to get current user ID
-  const getCurrentUserId = () => {
-    const possibleKeys = ['userId', 'user_id', 'id', 'userID'];
-    for (const key of possibleKeys) {
-      const id = localStorage.getItem(key);
-      if (id) {
-        console.log('Found user ID in:', key, '=', id);
-        return id;
-      }
-    }
-    return null;
-  };
-
+  /* boot */
   useEffect(() => {
-    const token = getAuthToken();
-    const userId = getCurrentUserId();
-    
-    console.log('Current User ID:', userId);
-    console.log('Auth Token:', token ? 'Present' : 'Missing');
-    
-    if (userId && token) {
-      fetchCurrentUser();
-      fetchConversations();
-      fetchUsers();
-    } else {
-      setError('User not properly logged in. Please login again.');
-    }
+    if (!token()) { navigate('/admin/login'); return; }
+    try { setCurrentUser(JSON.parse(localStorage.getItem('adminData')||'{}')); } catch {}
+    fetchConversations();
+    fetchUnread();
+  }, []);
+
+  /* poll */
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (!token()) return;
+      fetchUnread();
+      fetchConversations(true);
+      if (selectedUserRef.current) silentRefreshMsgs(selectedUserRef.current._id);
+    }, 8000);
+    return () => clearInterval(iv);
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior:'smooth' });
   }, [messages]);
 
-  // Fetch current user info
-  const fetchCurrentUser = async () => {
+  /* ─── API ─── */
+  const fetchUnread = async () => {
     try {
-      const token = getAuthToken();
-      const response = await fetch(`${API_URL}/api/messages/health`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentUser(data.authenticatedUser);
-        console.log('Current user:', data.authenticatedUser);
-      }
-    } catch (error) {
-      console.error('Error fetching current user:', error);
-    }
+      const r = await fetch(`${API_URL}/api/messages/unread/count`, { headers: hdrs() });
+      if (r.ok) { const d = await r.json(); setUnreadCount(d.unreadCount||0); }
+    } catch {}
   };
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (silent = false) => {
+    if (!silent) setLoadingConvs(true);
     try {
-      setLoading(true);
-      setError('');
-      const token = getAuthToken();
-      
-      console.log('Fetching conversations...');
-      
-      // Updated endpoint - no need to pass currentUserId in URL
-      const response = await fetch(`${API_URL}/api/messages/conversations`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      console.log('Conversations response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Conversations data received:', data);
+      const r = await fetch(`${API_URL}/api/messages/conversations`, { headers: hdrs() });
+      if (r.ok) {
+        const data = await r.json();
+        console.log('[Messages] Conversations loaded:', data.length);
         setConversations(data);
+        if (!silent) setError('');
       } else {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        setError('Failed to load conversations');
+        console.error('[Messages] Fetch failed:', r.status);
+        if (!silent) setError('Could not load conversations.');
       }
-    } catch (error) {
-      console.error('Error fetching conversations:', error);
-      setError('Network error loading conversations');
+    } catch(e) {
+      console.error('[Messages] Network error:', e);
+      if (!silent) setError('Network error.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoadingConvs(false);
     }
   };
 
-  const fetchUsers = async () => {
+  const fetchMessages = async (userId) => {
+    setLoadingMsgs(true);
+    setMessages([]);
     try {
-      const token = getAuthToken();
-      const response = await fetch(`${API_URL}/api/messages/users`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Users data:', data);
-        setUsers(data);
-      } else {
-        console.error('Failed to fetch users');
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    }
-  };
-
-  const fetchMessages = async (otherUserId) => {
-    try {
-      setError('');
-      const token = getAuthToken();
-      console.log('Fetching messages with user:', otherUserId);
-      
-      // Updated endpoint - only need otherUserId
-      const response = await fetch(`${API_URL}/api/messages/conversation/${otherUserId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      console.log('Messages response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Messages data received:', data);
+      const r = await fetch(`${API_URL}/api/messages/conversation/${userId}`, { headers: hdrs() });
+      if (r.ok) {
+        const data = await r.json();
         setMessages(data);
-        
-        // Mark messages as read
-        await markAsRead(otherUserId);
+        markRead(userId);
+        fetchUnread();
       } else {
-        const errorText = await response.text();
-        console.error('Error fetching messages:', errorText);
-        setError('Failed to load messages');
+        setError('Failed to load messages.');
       }
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      setError('Network error loading messages');
-    }
+    } catch { setError('Network error loading messages.'); }
+    finally { setLoadingMsgs(false); }
   };
 
-  const markAsRead = async (senderId) => {
+  const silentRefreshMsgs = async (userId) => {
     try {
-      const token = getAuthToken();
-      // Updated endpoint - only need senderId
-      await fetch(`${API_URL}/api/messages/read/${senderId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-    } catch (error) {
-      console.error('Error marking messages as read:', error);
-    }
+      const r = await fetch(`${API_URL}/api/messages/conversation/${userId}`, { headers: hdrs() });
+      if (r.ok) {
+        const data = await r.json();
+        setMessages(prev => prev.length !== data.length ? data : prev);
+      }
+    } catch {}
+  };
+
+  const markRead = async (id) => {
+    try { await fetch(`${API_URL}/api/messages/read/${id}`, { method:'PUT', headers: hdrs() }); }
+    catch {}
   };
 
   const sendMessage = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !selectedUser) {
-      setError('Please select a user and enter a message');
-      return;
-    }
-
+    e?.preventDefault();
+    const txt = newMessage.trim();
+    if (!txt || !selectedUser || sending) return;
+    setNewMessage('');
+    setSending(true);
     try {
-      setError('');
-      const token = getAuthToken();
-      console.log('Sending message to:', selectedUser._id, 'text:', newMessage);
-
-      // Updated - no need to send senderId, backend gets it from token
-      const response = await fetch(`${API_URL}/api/messages/send`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          receiverId: selectedUser._id, // Only receiverId needed now
-          text: newMessage
-        }),
+      const r = await fetch(`${API_URL}/api/messages/send`, {
+        method:'POST', headers: hdrs(),
+        body: JSON.stringify({ receiverId: selectedUser._id, text: txt }),
       });
-
-      console.log('Send message response status:', response.status);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Message sent successfully:', data);
+      if (r.ok) {
+        const data = await r.json();
         setMessages(prev => [...prev, data.message]);
-        setNewMessage('');
-        fetchConversations(); // Refresh conversations list
+        fetchConversations(true);
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior:'smooth' }), 80);
       } else {
-        const errorData = await response.json();
-        console.error('Send message error:', errorData);
-        setError('Failed to send message: ' + (errorData.message || 'Unknown error'));
+        setNewMessage(txt);
+        setError('Failed to send.');
       }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setError('Network error sending message');
-    }
+    } catch { setNewMessage(txt); setError('Network error.'); }
+    finally { setSending(false); inputRef.current?.focus(); }
   };
 
-  const searchUsers = async (query) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
+  const searchUsers = async (q) => {
+    if (q.length < 2) { setSearchResults([]); return; }
+    setSearchLoading(true);
     try {
-      const token = getAuthToken();
-      const response = await fetch(`${API_URL}/api/messages/search?q=${encodeURIComponent(query)}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setSearchResults(data);
+      const r = await fetch(`${API_URL}/api/messages/search?q=${encodeURIComponent(q)}`, { headers: hdrs() });
+      if (r.ok) {
+        const data = await r.json();
+        setSearchResults(data.filter(u => u._id !== myId()));
       }
-    } catch (error) {
-      console.error('Error searching users:', error);
-    }
+    } catch {}
+    finally { setSearchLoading(false); }
   };
 
   const selectUser = (user) => {
-    console.log('Selecting user:', user);
     setSelectedUser(user);
     setSearchQuery('');
     setSearchResults([]);
     setError('');
     fetchMessages(user._id);
+    setConversations(prev =>
+      prev.map(c => c.user._id === user._id ? {...c, unread:false, unreadCount:0} : c)
+    );
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const deleteMessage = async (id) => {
+    if (!window.confirm('Delete this message?')) return;
+    try {
+      const r = await fetch(`${API_URL}/api/messages/${id}`, { method:'DELETE', headers: hdrs() });
+      if (r.ok) { setMessages(prev => prev.filter(m => m._id !== id)); fetchConversations(true); }
+      else setError('Could not delete message.');
+    } catch { setError('Network error.'); }
   };
 
-  const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  /* FIX: conversations always show — filter only when explicitly changed */
+  const filteredConvs = filterBarangay === 'all'
+    ? conversations
+    : conversations.filter(c => (c.user?.barangay||'').toLowerCase().includes(filterBarangay.toLowerCase()));
+
+  const currentUserId = myId();
+  const isAdmin = currentUser?.role === 'admin';
+  const rm = currentUser ? roleMeta(currentUser.role, t) : null;
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
-  const getRoleBadge = (role) => {
-    if (role === 'admin') {
-      return <span className="role-badge admin">Admin</span>;
-    } else if (role === 'user') {
-      return <span className="role-badge user">User</span>;
-    }
-    return null;
-  };
-
-  const getDisplayName = (user) => {
-    return user.username || user.email?.split('@')[0] || 'Unknown User';
-  };
-
-  const getAvatarInitial = (user) => {
-    const name = getDisplayName(user);
-    return name?.charAt(0).toUpperCase() || 'U';
-  };
-
+  /* ─── RENDER ─── */
   return (
-    <div className="messaging-container">
-      {/* Header */}
-      <div className="content-topbar">
-        <div className="topbar-left">
-          <div className="page-breadcrumb">
-            <span className="breadcrumb-item">Dashboard</span>
-            <span className="breadcrumb-separator">→</span>
-            <span className="breadcrumb-item active">Messages</span>
-          </div>
-          <h1 className="page-title">Messages</h1>
-          <p className="page-subtitle">
-            <span className="subtitle-dot"></span>
-            {currentUser ? `Logged in as: ${currentUser.email} (${currentUser.role})` : 'Communicate with users and team members'}
-          </p>
-        </div>
-      </div>
+    <>
+      <style>{buildCSS(t)}</style>
+      <div className="msg-root">
 
-      {/* Error Display */}
-      {error && (
-        <div className="error-message">
-          {error}
-        </div>
-      )}
-
-      <div className="messaging-layout">
-        {/* Sidebar - Conversations List */}
-        <div className="conversations-sidebar">
-          <div className="sidebar-header">
-            <h3>Conversations</h3>
-            <div className="search-container">
-              <input
-                type="text"
-                placeholder="Search users..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  searchUsers(e.target.value);
-                }}
-                className="search-input"
-              />
+        {/* TOP BAR */}
+        <div style={{ padding:'12px 18px', borderBottom:`1px solid ${t.border}`,
+          background:t.surface, display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+          {/* left: icon + title */}
+          <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0 }}>
+            <div style={{ width:34, height:34, borderRadius:10, background:t.accentBg,
+              border:`1px solid ${t.accentBdr}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <Ic d={P.msg} size={16} color={t.accent}/>
+            </div>
+            <div style={{ minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontSize:15, fontWeight:600, color:t.text }}>Messages</span>
+                {unreadCount > 0 && (
+                  <span style={{ background:t.accent, color:'#fff', fontSize:10, fontWeight:700,
+                    borderRadius:20, padding:'2px 7px', animation:'pulse 2s infinite' }}>
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+              {currentUser && rm && (
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2 }}>
+                  <div style={{ width:5, height:5, borderRadius:'50%', background:t.green }}/>
+                  <span style={{ fontSize:11, color:t.textMuted, overflow:'hidden',
+                    textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {currentUser.email}
+                  </span>
+                  <span className="badge" style={{ background:rm.bg, color:rm.color }}>{rm.label}</span>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Loading State */}
-          {loading && (
-            <div className="loading-state">Loading conversations...</div>
-          )}
+          {/* right: theme toggle + refresh */}
+          <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+            <button className="theme-btn" onClick={() => setIsDark(d => !d)}
+              title="Toggle theme">
+              <Ic d={isDark ? P.sun : P.moon} size={13} color={t.textSub}/>
+              <span>{isDark ? 'Light' : 'Dark'}</span>
+            </button>
+            <button className="icon-btn" onClick={() => fetchConversations()} title="Refresh">
+              <Ic d={P.refresh} size={14} color={t.textSub}/>
+            </button>
+          </div>
+        </div>
 
-          {/* Search Results */}
-          {searchResults.length > 0 && (
-            <div className="search-results">
-              <div className="search-results-header">Search Results</div>
-              {searchResults.map(user => (
-                <div
-                  key={user._id}
-                  className="conversation-item"
-                  onClick={() => selectUser(user)}
-                >
-                  <div className="user-avatar">
-                    {user.profile ? (
-                      <img src={user.profile} alt={getDisplayName(user)} />
-                    ) : (
-                      <span>{getAvatarInitial(user)}</span>
-                    )}
+        {/* ERROR BAR */}
+        {error && (
+          <div style={{ display:'flex', alignItems:'center', gap:10, background:t.redBg,
+            borderBottom:`1px solid ${t.red}22`, padding:'9px 18px',
+            fontSize:12.5, color:t.red, flexShrink:0 }}>
+            <Ic d={P.alert} size={14} color={t.red}/>
+            <span style={{ flex:1 }}>{error}</span>
+            <button onClick={() => setError('')} style={{ background:'none', border:'none',
+              color:t.red, cursor:'pointer', display:'flex', padding:2 }}>
+              <Ic d={P.x} size={14} color={t.red}/>
+            </button>
+          </div>
+        )}
+
+        {/* LAYOUT */}
+        <div style={{ display:'flex', flex:1, minHeight:0, overflow:'hidden' }}>
+
+          {/* ── SIDEBAR ── */}
+          <div style={{ width:288, minWidth:288, display:'flex', flexDirection:'column',
+            background:t.surface, borderRight:`1px solid ${t.border}`, overflow:'hidden' }}>
+
+            {/* sidebar top */}
+            <div style={{ padding:'12px 12px 10px', borderBottom:`1px solid ${t.border}`, flexShrink:0 }}>
+              {isAdmin && (
+                <select className="filter-select" value={filterBarangay}
+                  onChange={e => setFilterBarangay(e.target.value)}>
+                  <option value="all">All Barangays</option>
+                  <option value="South Signal">South Signal</option>
+                  <option value="Central Bicutan">Central Bicutan</option>
+                </select>
+              )}
+              <div style={{ position:'relative' }}>
+                <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)',
+                  pointerEvents:'none', display:'flex' }}>
+                  <Ic d={P.search} size={13} color={t.textMuted}/>
+                </span>
+                <input className="search-input" placeholder="Search residents…"
+                  value={searchQuery}
+                  onChange={e => {
+                    setSearchQuery(e.target.value);
+                    searchUsers(e.target.value);
+                    if (!e.target.value) { setSearchResults([]); setError(''); }
+                  }}/>
+              </div>
+            </div>
+
+            {/* list header */}
+            <div style={{ padding:'8px 14px', display:'flex', alignItems:'center',
+              justifyContent:'space-between', flexShrink:0 }}>
+              <span style={{ fontSize:10, fontWeight:600, color:t.textMuted,
+                textTransform:'uppercase', letterSpacing:'0.07em' }}>
+                {searchQuery ? 'Results' : 'Conversations'}
+              </span>
+              <span style={{ fontSize:10, color:t.textMuted }}>
+                {searchQuery ? searchResults.length : filteredConvs.length}
+              </span>
+            </div>
+
+            {/* list body */}
+            <div style={{ flex:1, overflowY:'auto' }}>
+              {/* skeletons */}
+              {loadingConvs && !searchQuery && [0,1,2,3].map(i => <ConvSkeleton key={i} t={t}/>)}
+
+              {/* search loading */}
+              {searchLoading && (
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px',
+                  fontSize:12, color:t.textSub }}>
+                  <div style={{ animation:'spin 0.8s linear infinite', display:'flex' }}>
+                    <Ic d={P.spin} size={13} color={t.textSub}/>
                   </div>
-                  <div className="conversation-info">
-                    <div className="user-name">
-                      {getDisplayName(user)}
-                      {getRoleBadge(user.role)}
+                  Searching…
+                </div>
+              )}
+
+              {/* search results */}
+              {!searchLoading && searchResults.length > 0 && searchQuery && searchResults.map((u, i) => (
+                <div key={u._id} className={`conv-item${selectedUser?._id === u._id ? ' active' : ''}`}
+                  style={{ animationDelay:`${i*0.04}s` }} onClick={() => selectUser(u)}>
+                  <Avatar user={u} size={42} showOnline t={t}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3 }}>
+                      <span style={{ fontSize:13, fontWeight:600, color:t.text,
+                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>
+                        {displayName(u)}
+                      </span>
+                      <span className="badge" style={{ background:roleMeta(u.role,t).bg, color:roleMeta(u.role,t).color }}>
+                        {roleMeta(u.role,t).label}
+                      </span>
                     </div>
-                    <div className="user-email">{user.email}</div>
+                    <div style={{ fontSize:11, color:t.textMuted, overflow:'hidden',
+                      textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</div>
+                    {u.barangay && (
+                      <div style={{ display:'flex', alignItems:'center', gap:3, marginTop:3 }}>
+                        <Ic d={P.pin} size={9} color={t.textMuted}/>
+                        <span style={{ fontSize:10, color:t.textMuted }}>{u.barangay}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
-            </div>
-          )}
 
-          {/* Conversations List */}
-          <div className="conversations-list">
-            {conversations.length === 0 && !loading ? (
-              <div className="no-conversations">
-                No conversations yet. Start by searching for a user.
-              </div>
-            ) : (
-              conversations.map(conversation => (
-                <div
-                  key={conversation.user._id}
-                  className={`conversation-item ${selectedUser?._id === conversation.user._id ? 'active' : ''}`}
-                  onClick={() => selectUser(conversation.user)}
-                >
-                  <div className="user-avatar">
-                    {conversation.user.profile ? (
-                      <img src={conversation.user.profile} alt={getDisplayName(conversation.user)} />
-                    ) : (
-                      <span>{getAvatarInitial(conversation.user)}</span>
-                    )}
-                    {conversation.unread && <div className="unread-indicator"></div>}
-                  </div>
-                  <div className="conversation-info">
-                    <div className="user-name">
-                      {getDisplayName(conversation.user)}
-                      {getRoleBadge(conversation.user.role)}
-                    </div>
-                    <div className="last-message">{conversation.lastMessage.text}</div>
-                    <div className="message-time">
-                      {formatTime(conversation.lastMessage.timestamp)}
-                    </div>
-                  </div>
+              {/* no results */}
+              {!searchLoading && searchQuery && searchResults.length === 0 && (
+                <div style={{ padding:'32px 16px', textAlign:'center' }}>
+                  <div style={{ fontSize:28, marginBottom:8 }}>🔍</div>
+                  <p style={{ fontSize:13, color:t.textSub, fontWeight:500 }}>No users found</p>
+                  <p style={{ fontSize:11, color:t.textMuted, marginTop:4 }}>Try a different name or email</p>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
+              )}
 
-        {/* Chat Area */}
-        <div className="chat-area">
-          {selectedUser ? (
-            <>
-              <div className="chat-header">
-                <div className="chat-user-info">
-                  <div className="user-avatar">
-                    {selectedUser.profile ? (
-                      <img src={selectedUser.profile} alt={getDisplayName(selectedUser)} />
-                    ) : (
-                      <span>{getAvatarInitial(selectedUser)}</span>
-                    )}
-                  </div>
-                  <div>
-                    <div className="user-name">
-                      {getDisplayName(selectedUser)}
-                      {getRoleBadge(selectedUser.role)}
+              {/* conversation list */}
+              {!searchQuery && !loadingConvs && (
+                filteredConvs.length === 0 ? (
+                  <div style={{ padding:'48px 16px', textAlign:'center',
+                    display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+                    <div style={{ width:48, height:48, borderRadius:14, background:t.surface2,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      border:`1px solid ${t.border}` }}>
+                      <Ic d={P.inbox} size={22} color={t.textMuted}/>
                     </div>
-                    <div className="user-status">Online</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="messages-container">
-                {messages.length === 0 ? (
-                  <div className="no-messages">
-                    No messages yet. Start the conversation!
+                    <p style={{ fontSize:13, fontWeight:600, color:t.textSub }}>No conversations yet</p>
+                    <p style={{ fontSize:11.5, color:t.textMuted }}>Search for a resident to message</p>
                   </div>
                 ) : (
-                  messages.map(message => (
-                    <div
-                      key={message._id}
-                      className={`message ${message.senderId === getCurrentUserId() ? 'sent' : 'received'}`}
-                    >
-                      <div className="message-content">
-                        <div className="message-text">{message.text}</div>
-                        <div className="message-time">
-                          {formatTime(message.timestamp)}
+                  filteredConvs.map((conv, i) => {
+                    const isActive  = selectedUser?._id === conv.user._id;
+                    const hasUnread = conv.unread || conv.unreadCount > 0;
+                    return (
+                      <div key={conv.user._id}
+                        className={`conv-item${isActive ? ' active' : ''}`}
+                        style={{ animationDelay:`${i*0.05}s` }}
+                        onClick={() => selectUser(conv.user)}>
+                        <div style={{ position:'relative', flexShrink:0 }}>
+                          <Avatar user={conv.user} size={42} t={t}/>
+                          {hasUnread && (
+                            <div style={{ position:'absolute', top:0, right:0,
+                              width:11, height:11, borderRadius:'50%',
+                              background:t.accent, border:`2px solid ${t.surface}`,
+                              animation:'pulse 2s infinite' }}/>
+                          )}
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:'flex', alignItems:'center',
+                            justifyContent:'space-between', marginBottom:3 }}>
+                            <span style={{ fontSize:13, fontWeight: hasUnread ? 700 : 500,
+                              color: hasUnread ? t.text : t.textSub,
+                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>
+                              {displayName(conv.user)}
+                            </span>
+                            <span style={{ fontSize:10, color:t.textMuted, marginLeft:6, flexShrink:0 }}>
+                              {fmtRelative(conv.lastMessage?.timestamp || conv.lastMessage?.createdAt)}
+                            </span>
+                          </div>
+                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                            <span style={{ fontSize:11.5, color: hasUnread ? t.textSub : t.textMuted,
+                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>
+                              {conv.lastMessage?.text?.substring(0,44)}{conv.lastMessage?.text?.length > 44 ? '…' : ''}
+                            </span>
+                            {conv.unreadCount > 0 && (
+                              <span style={{ background:t.accent, color:'#fff', fontSize:9, fontWeight:700,
+                                borderRadius:20, padding:'2px 6px', marginLeft:6, flexShrink:0 }}>
+                                {conv.unreadCount}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
-                <div ref={messagesEndRef} />
+                    );
+                  })
+                )
+              )}
+            </div>
+          </div>
+
+          {/* ── CHAT AREA ── */}
+          {selectedUser ? (
+            <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, background:t.bg }}>
+
+              {/* chat header */}
+              <div style={{ background:t.surface, borderBottom:`1px solid ${t.border}`,
+                padding:'11px 18px', display:'flex', alignItems:'center', gap:12, flexShrink:0,
+                boxShadow: t.shadow }}>
+                <Avatar user={selectedUser} size={40} showOnline t={t}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+                    <span style={{ fontSize:14, fontWeight:600, color:t.text }}>
+                      {displayName(selectedUser)}
+                    </span>
+                    <span className="badge"
+                      style={{ background:roleMeta(selectedUser.role,t).bg,
+                        color:roleMeta(selectedUser.role,t).color }}>
+                      {roleMeta(selectedUser.role,t).label}
+                    </span>
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', gap:10,
+                    fontSize:11, color:t.textMuted }}>
+                    {selectedUser.email && <span>{selectedUser.email}</span>}
+                    {selectedUser.barangay && (
+                      <span style={{ display:'flex', alignItems:'center', gap:3 }}>
+                        <Ic d={P.pin} size={9} color={t.textMuted}/>
+                        {selectedUser.barangay}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:5,
+                  background:t.greenBg, border:`1px solid ${t.green}33`,
+                  borderRadius:20, padding:'4px 10px', fontSize:11, color:t.green }}>
+                  <div style={{ width:6, height:6, borderRadius:'50%', background:t.green }}/>
+                  Online
+                </div>
               </div>
 
-              <form onSubmit={sendMessage} className="message-input-form">
-                <div className="input-container">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Type a message..."
-                    className="message-input"
-                    disabled={!selectedUser}
-                  />
-                  <button 
-                    type="submit" 
-                    className="send-button"
-                    disabled={!newMessage.trim() || !selectedUser}
-                  >
-                    Send
-                  </button>
-                </div>
-              </form>
-            </>
+              {/* messages */}
+              <div style={{ flex:1, overflowY:'auto', padding:'18px',
+                display:'flex', flexDirection:'column', gap:5 }}>
+
+                {loadingMsgs ? (
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {[200,140,180,120].map((w,i) => (
+                      <div key={i} style={{ display:'flex', justifyContent: i%2===0 ? 'flex-start':'flex-end' }}>
+                        <div className="skeleton" style={{ height:36, width:w, borderRadius:12 }}/>
+                      </div>
+                    ))}
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center',
+                    justifyContent:'center', height:'100%', gap:12, color:t.textMuted }}>
+                    <div style={{ width:60, height:60, borderRadius:18, background:t.surface,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      border:`1px solid ${t.border}` }}>
+                      <Ic d={P.msg} size={26} color={t.textMuted}/>
+                    </div>
+                    <p style={{ fontSize:14, fontWeight:600, color:t.textSub }}>No messages yet</p>
+                    <p style={{ fontSize:12, color:t.textMuted }}>Say hello to {displayName(selectedUser)}</p>
+                  </div>
+                ) : (
+                  messages.map((msg, idx) => {
+                    const isSent = msg.senderId === currentUserId;
+                    const showAvt = !isSent && (idx === 0 || messages[idx-1]?.senderId !== msg.senderId);
+                    return (
+                      <div key={msg._id||idx}
+                        className={`msg-row ${isSent ? 'sent' : 'recv'}`}>
+                        {/* recv avatar */}
+                        {!isSent && (
+                          <div style={{ width:28, flexShrink:0 }}>
+                            {showAvt && <Avatar user={selectedUser} size={28} t={t}/>}
+                          </div>
+                        )}
+
+                        <div className="msg-bubble">
+                          <div style={{
+                            padding:'9px 13px',
+                            borderRadius: isSent ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+                            background: isSent ? t.sentBubble : t.recvBubble,
+                            border: isSent ? 'none' : `1px solid ${t.border}`,
+                            boxShadow: t.shadow,
+                          }}>
+                            <div style={{ fontSize:13.5, lineHeight:1.55,
+                              color: isSent ? t.sentText : t.recvText }}>
+                              {msg.text}
+                            </div>
+                            <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:4,
+                              fontSize:10, color: isSent ? 'rgba(255,255,255,0.5)' : t.textMuted }}>
+                              <span>{fmtTime(msg.timestamp||msg.createdAt)}</span>
+                              {isSent && (
+                                <Ic d={msg.read ? P.checks : P.check}
+                                  size={11} color={msg.read ? (isDark ? '#93C5FD' : '#60A5FA') : 'rgba(255,255,255,0.45)'}/>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* delete */}
+                        {isSent && (
+                          <button className="msg-del icon-btn"
+                            onClick={() => deleteMessage(msg._id)}
+                            style={{ opacity:0, padding:5, flexShrink:0 }}
+                            title="Delete message">
+                            <Ic d={P.trash} size={12} color={t.red}/>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={messagesEndRef}/>
+              </div>
+
+              {/* input bar */}
+              <div style={{ background:t.surface, borderTop:`1px solid ${t.border}`,
+                padding:'11px 14px', display:'flex', alignItems:'flex-end', gap:10, flexShrink:0 }}>
+                <textarea
+                  ref={inputRef}
+                  className="msg-input"
+                  rows={1}
+                  placeholder={`Message ${displayName(selectedUser)}…`}
+                  value={newMessage}
+                  onChange={e => {
+                    setNewMessage(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 96) + 'px';
+                  }}
+                  onKeyDown={handleKeyDown}
+                  style={{ height:'auto' }}
+                />
+                <button className="send-btn" onClick={sendMessage}
+                  disabled={!newMessage.trim() || sending} title="Send (Enter)">
+                  {sending
+                    ? <div style={{ animation:'spin 0.7s linear infinite', display:'flex' }}>
+                        <Ic d={P.spin} size={16} color="#fff"/>
+                      </div>
+                    : <Ic d={P.send} size={15} color="#fff" sw={2}/>
+                  }
+                </button>
+              </div>
+            </div>
           ) : (
-            <div className="no-chat-selected">
-              <div className="empty-state">
-                <div className="empty-icon">💬</div>
-                <h3>Select a conversation</h3>
-                <p>Choose a user from the list to start messaging</p>
+            /* empty / no chat selected */
+            <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center',
+              background:t.bg }}>
+              <div style={{ textAlign:'center', display:'flex', flexDirection:'column',
+                alignItems:'center', gap:16, animation:'fadeIn 0.3s ease' }}>
+                <div style={{ width:88, height:88, borderRadius:24,
+                  background:t.accentBg, border:`1px solid ${t.accentBdr}`,
+                  display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <Ic d={P.msg} size={38} color={t.accent} sw={1.5}/>
+                </div>
+                <div>
+                  <h3 style={{ fontSize:17, fontWeight:600, color:t.text, marginBottom:6 }}>
+                    Select a conversation
+                  </h3>
+                  <p style={{ fontSize:13, color:t.textMuted }}>
+                    Pick a resident from the sidebar to start messaging
+                  </p>
+                </div>
+                {unreadCount > 0 && (
+                  <div style={{ display:'flex', alignItems:'center', gap:8,
+                    background:t.accentBg, border:`1px solid ${t.accentBdr}`,
+                    borderRadius:12, padding:'9px 16px', fontSize:12.5,
+                    color:t.accent, fontWeight:500 }}>
+                    <Ic d={P.msg} size={14} color={t.accent}/>
+                    {unreadCount} unread message{unreadCount !== 1 ? 's' : ''} waiting
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

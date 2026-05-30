@@ -9,6 +9,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const wasteRoutes = require('./routes/wasteRoutes');
 const Notification = require('./routes/notificationRoutes');
+const postRoutes = require('./routes/postRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -29,8 +30,9 @@ app.use('/api/users', userRoutes)
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/admins', adminRoutes);
 app.use('/api/messages', messageRoutes);
-app.use('/api/waste-reports', wasteRoutes); // CHANGED FROM '/api/waste'
+app.use('/api/waste-reports', wasteRoutes); 
 app.use('/api/notifications', Notification);
+app.use('/api/posts', postRoutes);
 
 mongoose.connect(process.env.MONGO_URI, {
     useNewUrlParser: true,

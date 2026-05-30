@@ -20,9 +20,14 @@ const upload = multer({
 // Middleware to parse form-data
 const parseFormData = upload.none();
 
+// Helper function to check if user is admin (any admin type)
+const isAdmin = (user) => {
+  return user.role === 'admin' || user.role === 'southadmin' || user.role === 'centraladmin' || user.role === 'superadmin';
+};
+
 // ==================== REGISTER ====================
 router.post('/register', async (req, res) => {
-  const { username, email, password, bod, gender, address, role } = req.body;
+  const { username, email, password, bod, gender, address, role, barangay } = req.body;
 
   try {
     const existingUser = await User.findOne({ email });
@@ -40,12 +45,15 @@ router.post('/register', async (req, res) => {
       bod,
       gender,
       address,
-      role,
+      role: role || 'user',
+      barangay: barangay || '',
+      status: 'active'
     });
 
     await newUser.save();
     res.status(201).json({ message: 'User registered successfully' });
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(500).json({ message: 'Server error during registration' });
   }
 });
@@ -67,7 +75,14 @@ router.post('/login', async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
+    // Include role in token (could be 'southadmin', 'centraladmin', 'admin', or 'user')
+    const tokenPayload = { 
+      id: user._id, 
+      role: user.role,
+      barangay: user.barangay
+    };
+
+    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
       expiresIn: '1d',
     });
 
@@ -82,17 +97,19 @@ router.post('/login', async (req, res) => {
         bod: user.bod,
         address: user.address,
         profile: user.profile,
+        barangay: user.barangay,
         createdAt: user.createdAt,
         lastLogin: user.lastLogin,
         status: user.status,
       },
     });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Server error during login' });
   }
 });
 
-// ==================== UPDATE PROFILE (FIXED VERSION) ====================
+// ==================== UPDATE PROFILE ====================
 router.put('/profile', auth, parseFormData, async (req, res) => {
   try {
     console.log('🔧 Profile update request received for user:', req.user.id);
@@ -102,7 +119,6 @@ router.put('/profile', auth, parseFormData, async (req, res) => {
     
     const updatedFields = {};
 
-    // ✅ Handle text fields - only update if they exist and are not empty
     if (username !== undefined && username !== '') {
       updatedFields.username = username;
       console.log('📝 Updating username:', username);
@@ -124,14 +140,11 @@ router.put('/profile', auth, parseFormData, async (req, res) => {
       console.log('📝 Updating address:', address);
     }
 
-    // ✅ Handle profile image update/removal
     if (profile !== undefined) {
       if (profile === '') {
-        // User wants to remove profile picture
         updatedFields.profile = null;
         console.log('🗑️ Removing profile picture');
       } else if (profile && profile.startsWith('data:image')) {
-        // User uploaded new image (base64)
         try {
           console.log('📸 Uploading new profile picture to Cloudinary...');
           const uploadResponse = await cloudinary.uploader.upload(profile, {
@@ -149,12 +162,10 @@ router.put('/profile', auth, parseFormData, async (req, res) => {
 
     console.log('🔄 Fields to update:', updatedFields);
 
-    // Check if there are any fields to update
     if (Object.keys(updatedFields).length === 0) {
       return res.status(400).json({ message: 'No fields to update' });
     }
 
-    // Update user in database
     const updatedUser = await User.findByIdAndUpdate(
       req.user.id, 
       { $set: updatedFields }, 
@@ -187,6 +198,7 @@ router.put('/profile', auth, parseFormData, async (req, res) => {
         profile: updatedUser.profile,
         role: updatedUser.role,
         status: updatedUser.status,
+        barangay: updatedUser.barangay,
         createdAt: updatedUser.createdAt,
         lastLogin: updatedUser.lastLogin,
       },
@@ -215,6 +227,7 @@ router.get('/me', auth, async (req, res) => {
         bod: user.bod,
         address: user.address,
         profile: user.profile,
+        barangay: user.barangay,
         createdAt: user.createdAt,
         lastLogin: user.lastLogin,
         status: user.status,
@@ -242,23 +255,45 @@ router.post('/check-email', async (req, res) => {
   }
 });
 
-// ==================== GET ALL USERS (Admin only) ====================
+// ==================== GET ALL USERS (Admin only - now accepts southadmin, centraladmin, admin) ====================
 router.get('/all-users', auth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
+    // Check if user has any admin role
+    if (!isAdmin(req.user)) {
       return res.status(403).json({ message: 'Access denied. Admins only.' });
     }
 
-    const users = await User.find().select('-password');
+    console.log('User role:', req.user.role);
+    
+    let query = {};
+    
+    // Filter by admin type based on role
+    if (req.user.role === 'southadmin') {
+      query.barangay = 'South Signal';
+      console.log('Filtering for South Signal residents');
+    } else if (req.user.role === 'centraladmin') {
+      query.barangay = 'Central Bicutan';
+      console.log('Filtering for Central Bicutan residents');
+    }
+    // For 'admin' or 'superadmin', return all users (no filter)
+
+    console.log('Query:', query);
+
+    const users = await User.find(query).select('-password').sort({ createdAt: -1 });
+    
+    console.log(`Found ${users.length} users`);
+    
     res.json(users);
   } catch (error) {
-    res.status(500).json({ message: 'Server error fetching users' });
+    console.error('Error fetching users:', error);
+    res.status(500).json({ message: 'Server error fetching users: ' + error.message });
   }
 });
 
 // ==================== BAN / ACTIVATE USER ====================
 router.put('/ban/:id', auth, async (req, res) => {
-  if (req.user.role !== 'admin') {
+  // Check if user has any admin role
+  if (!isAdmin(req.user)) {
     return res.status(403).json({ message: 'Access denied. Admins only.' });
   }
 
@@ -269,6 +304,21 @@ router.put('/ban/:id', auth, async (req, res) => {
   }
 
   try {
+    // Get the user to be updated
+    const targetUser = await User.findById(req.params.id);
+    
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if admin has permission to modify this user based on their role
+    if (req.user.role === 'southadmin' && targetUser.barangay !== 'South Signal') {
+      return res.status(403).json({ message: 'You can only manage South Signal residents' });
+    }
+    if (req.user.role === 'centraladmin' && targetUser.barangay !== 'Central Bicutan') {
+      return res.status(403).json({ message: 'You can only manage Central Bicutan residents' });
+    }
+
     const user = await User.findByIdAndUpdate(
       req.params.id, 
       { status }, 
@@ -279,9 +329,11 @@ router.put('/ban/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    console.log(`User ${user.username} status updated to ${status} by ${req.user.role}`);
     res.json({ message: `User status updated to ${status}`, user });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating user status' });
+    console.error('Error updating user status:', error);
+    res.status(500).json({ message: 'Error updating user status: ' + error.message });
   }
 });
 

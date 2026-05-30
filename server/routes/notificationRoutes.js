@@ -92,11 +92,15 @@ router.post('/', auth, async (req, res) => {
   try {
     const { title, message, type, relatedReport } = req.body;
 
+    // Validate type
+    const validTypes = ['report_created', 'report_processed', 'pickup_scheduled', 'recycling_tips', 'system'];
+    const notificationType = validTypes.includes(type) ? type : 'system';
+
     const notification = new Notification({
       user: req.user.id,
       title,
       message,
-      type: type || 'system',
+      type: notificationType,
       relatedReport: relatedReport || null
     });
 
@@ -107,12 +111,24 @@ router.post('/', auth, async (req, res) => {
     // Send push notification if user has push token and notifications are enabled
     const user = await User.findById(req.user.id);
     if (user && user.pushToken && user.notificationsEnabled) {
-      console.log('📱 Sending push notification to:', user.pushToken);
-      await sendPushNotification(user.pushToken, title, message, {
-        notificationId: notification._id,
-        type: type || 'system',
-        screen: 'Notifications'
-      });
+      // Check user preferences for this notification type
+      let shouldSend = true;
+      if (notificationType === 'report_created' || notificationType === 'report_processed' || notificationType === 'pickup_scheduled') {
+        shouldSend = user.notificationPreferences?.reportUpdates !== false;
+      } else if (notificationType === 'recycling_tips') {
+        shouldSend = user.notificationPreferences?.recyclingTips !== false;
+      } else if (notificationType === 'system') {
+        shouldSend = user.notificationPreferences?.systemNotifications !== false;
+      }
+
+      if (shouldSend) {
+        console.log('📱 Sending push notification to:', user.pushToken);
+        await sendPushNotification(user.pushToken, title, message, {
+          notificationId: notification._id.toString(),
+          type: notificationType,
+          screen: notificationType === 'pickup_scheduled' ? 'PickupSchedule' : 'Notifications'
+        });
+      }
     }
 
     res.status(201).json(notification);

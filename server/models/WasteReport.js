@@ -22,7 +22,7 @@ const wasteReportSchema = new mongoose.Schema({
     label: String,
     confidence: Number,
     category: String,
-    box: [Number], // [x1, y1, x2, y2] normalized
+    box: [Number],
     material: String,
     area_percentage: Number
   }],
@@ -48,8 +48,6 @@ const wasteReportSchema = new mongoose.Schema({
     of: Number
   },
   recyclingTips: [String],
-
-  // ── Location ──────────────────────────────────────────────────────────────
   location: {
     address: String,
     coordinates: {
@@ -58,26 +56,92 @@ const wasteReportSchema = new mongoose.Schema({
     },
     timestamp: String
   },
-
-
   assignedBarangay: {
     type: String,
-    enum: ['south_signal', 'central_signal', 'tup_taguig'],
+    enum: ['south_signal', 'central_bicutan', 'tup_taguig'],
     required: true
   },
-  // Human-readable label shown in the UI
   assignedBarangayLabel: {
     type: String,
-    enum: ['South Signal, Taguig', 'Central Signal, Taguig', 'TUP Taguig'],
+    enum: ['South Signal, Taguig', 'Central Bicutan, Taguig', 'TUP Taguig'],
     required: true
   },
 
-  // ── Status & admin fields ─────────────────────────────────────────────────
   status: {
     type: String,
-    enum: ['pending', 'processed', 'recycled', 'disposed', 'rejected'],
+    enum: ['pending', 'processed', 'scheduled', 'recycled', 'disposed', 'rejected', 'completed'],
     default: 'pending'
   },
+
+  // Admin proof images - Updated with more enum values
+  adminProofImages: [{
+    url: String,
+    cloudinaryId: String,
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    },
+    description: String,
+    type: {
+      type: String,
+      enum: ['pickup_scheduled', 'collected', 'processed', 'recycled', 'disposed', 'completed', 'hazardous_waste'],
+      default: 'processed'
+    }
+  }],
+
+  // Pickup scheduling
+  scheduledPickup: {
+    scheduledDate: Date,
+    scheduledTime: String,
+    notes: String,
+    scheduledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    scheduledAt: Date,
+    confirmed: {
+      type: Boolean,
+      default: false
+    },
+    confirmedAt: Date,
+    pickupAddress: String
+  },
+
+  // Collection tracking
+  collectionDetails: {
+    collectedAt: Date,
+    collectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    collectionProofImage: String,
+    collectionProofCloudinaryId: String,
+    weight: Number,
+    notes: String
+  },
+
+  statusHistory: [{
+    status: {
+      type: String,
+      enum: ['pending', 'processed', 'scheduled', 'recycled', 'disposed', 'rejected', 'completed']
+    },
+    changedAt: {
+      type: Date,
+      default: Date.now
+    },
+    changedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    changedByName: String,
+    changedByRole: String,
+    notes: String,
+    proofImage: String,
+    proofImageUrl: String,
+    scheduledPickupDate: Date,
+    scheduledPickupTime: String
+  }],
+
   adminNotes: {
     type: String,
     default: ''
@@ -102,11 +166,12 @@ const wasteReportSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// ── Indexes ───────────────────────────────────────────────────────────────
+// Indexes
 wasteReportSchema.index({ user: 1, scanDate: -1 });
 wasteReportSchema.index({ status: 1 });
 wasteReportSchema.index({ classification: 1 });
 wasteReportSchema.index({ assignedBarangay: 1 });
 wasteReportSchema.index({ assignedBarangay: 1, status: 1 });
+wasteReportSchema.index({ 'scheduledPickup.scheduledDate': 1 });
 
 module.exports = mongoose.model('WasteReport', wasteReportSchema);

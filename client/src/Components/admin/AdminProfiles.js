@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import API_URL from '../Utils/Api';
 
 /* ─────────────────────────────────────────────────────────────
    ICON SYSTEM
@@ -38,8 +39,6 @@ const S = {
     color: '#e2e8f0',
     minHeight: '100%',
   },
-
-  /* ── Action row (top) ── */
   actionRow: {
     display: 'flex',
     justifyContent: 'flex-end',
@@ -59,8 +58,6 @@ const S = {
     cursor: 'pointer',
     transition: 'all 0.15s',
   },
-
-  /* ── Profile card ── */
   profileCard: {
     background: 'linear-gradient(135deg, #131c27 0%, #111827 100%)',
     border: '1px solid rgba(255,255,255,0.06)',
@@ -83,8 +80,6 @@ const S = {
     padding: '36px 36px',
     alignItems: 'flex-start',
   },
-
-  /* ── Avatar side ── */
   avatarSide: {
     display: 'flex',
     flexDirection: 'column',
@@ -164,11 +159,7 @@ const S = {
     background: '#10b981',
     boxShadow: '0 0 5px #10b981',
   },
-
-  /* ── Details side ── */
-  detailsSide: {
-    flex: 1,
-  },
+  detailsSide: { flex: 1 },
   detailsGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
@@ -211,8 +202,6 @@ const S = {
     background: '#10b981',
     boxShadow: '0 0 6px #10b981',
   },
-
-  /* ── Modal overlay ── */
   overlay: {
     position: 'fixed',
     inset: 0,
@@ -262,8 +251,6 @@ const S = {
     flexShrink: 0,
   },
   modalBody: { padding: '24px 28px' },
-
-  /* ── Form ── */
   formField: { marginBottom: 20 },
   fieldLabel: {
     display: 'flex',
@@ -289,7 +276,6 @@ const S = {
     transition: 'border-color 0.15s, box-shadow 0.15s',
   },
   fieldHint: { fontSize: 11, color: '#334155', marginTop: 5, display: 'block' },
-
   fileLabel: {
     display: 'flex',
     alignItems: 'center',
@@ -314,8 +300,20 @@ const S = {
     borderRadius: 5,
     padding: '4px 10px',
   },
-
-  /* ── Form actions ── */
+  previewWrap: {
+    marginTop: 10,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+  },
+  previewImg: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    objectFit: 'cover',
+    border: '2px solid rgba(16,185,129,0.3)',
+  },
+  previewName: { fontSize: 12, color: '#94a3b8' },
   formActions: {
     display: 'flex',
     gap: 10,
@@ -361,8 +359,6 @@ const S = {
     fontWeight: 700,
     cursor: 'pointer',
   },
-
-  /* ── Alert ── */
   alert: (isSuccess) => ({
     display: 'flex',
     alignItems: 'center',
@@ -375,8 +371,6 @@ const S = {
     border: `1px solid ${isSuccess ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`,
     color: isSuccess ? '#6ee7b7' : '#fca5a5',
   }),
-
-  /* ── Confirm modal ── */
   confirmBody: {
     padding: '32px 28px 28px',
     display: 'flex',
@@ -399,8 +393,6 @@ const S = {
   confirmTitle: { fontSize: 17, fontWeight: 800, color: '#f1f5f9', margin: 0 },
   confirmDesc: { fontSize: 13, color: '#64748b', lineHeight: 1.6, maxWidth: 340, margin: 0 },
   confirmActions: { display: 'flex', gap: 10, justifyContent: 'center', marginTop: 8 },
-
-  /* ── Floating toast ── */
   toast: {
     position: 'fixed',
     bottom: 28,
@@ -430,7 +422,7 @@ const S = {
 };
 
 /* ─────────────────────────────────────────────────────────────
-   DETAIL ITEM ROWS
+   DETAIL FIELDS
 ───────────────────────────────────────────────────────────── */
 const DETAIL_FIELDS = (admin) => [
   { icon: ICONS.mail,   label: 'Email Address',       value: admin?.email },
@@ -443,29 +435,28 @@ const DETAIL_FIELDS = (admin) => [
       ? new Date(admin.lastLogin).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
       : 'Never',
   },
-  {
-    icon: ICONS.check,
-    label: 'Account Status',
-    value: null, // rendered manually
-    isStatus: true,
-  },
-  { icon: ICONS.id, label: 'Admin ID', value: admin?.id || admin?._id?.substring(0, 8) || 'N/A' },
+  { icon: ICONS.check, label: 'Account Status', value: null, isStatus: true },
+  { icon: ICONS.id,    label: 'Admin ID', value: admin?.id || admin?._id?.substring(0, 8) || 'N/A' },
 ];
 
 /* ─────────────────────────────────────────────────────────────
    COMPONENT
 ───────────────────────────────────────────────────────────── */
-const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
-  const [showEdit, setShowEdit]           = useState(false);
-  const [showDelete, setShowDelete]       = useState(false);
-  const [profileForm, setProfileForm]     = useState({ email: admin?.email || '', password: '', profile: null });
-  const [message, setMessage]             = useState('');
-  const [isSuccess, setIsSuccess]         = useState(true);
-  const [loading, setLoading]             = useState(false);
-  const [inputFocus, setInputFocus]       = useState('');
+const AdminProfiles = ({ admin, onAdminUpdate, onProfileUpdate, onDeleteProfilePicture }) => {
+  const [showEdit, setShowEdit]         = useState(false);
+  const [showDelete, setShowDelete]     = useState(false);
+  const [profileForm, setProfileForm]   = useState({ email: '', password: '', profile: null });
+  const [previewUrl, setPreviewUrl]     = useState(null);
+  const [message, setMessage]           = useState('');
+  const [isSuccess, setIsSuccess]       = useState(true);
+  const [loading, setLoading]           = useState(false);
+  const [inputFocus, setInputFocus]     = useState('');
+
+  const token = localStorage.getItem('adminToken');
 
   const openEdit = () => {
     setProfileForm({ email: admin?.email || '', password: '', profile: null });
+    setPreviewUrl(null);
     setMessage('');
     setShowEdit(true);
   };
@@ -473,19 +464,92 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
   const closeEdit = () => {
     setShowEdit(false);
     setMessage('');
+    setPreviewUrl(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setProfileForm(p => ({ ...p, password: '', profile: null }));
   };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage('File size must be less than 5MB');
+      setIsSuccess(false);
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setMessage('Only image files are allowed');
+      setIsSuccess(false);
+      return;
+    }
+
+    setProfileForm(p => ({ ...p, profile: file }));
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+  };
+
+  // ── FIXED: /api/admins (plural) to match server.js mount point ──
   const handleUpdate = async (e) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
+
     try {
-      await onProfileUpdate(profileForm);
+      const formData = new FormData();
+
+      if (profileForm.email && profileForm.email !== admin?.email) {
+        formData.append('email', profileForm.email);
+      }
+      if (profileForm.password) {
+        formData.append('password', profileForm.password);
+      }
+      if (profileForm.profile) {
+        formData.append('profile', profileForm.profile);
+      }
+
+      if (!formData.has('email') && !formData.has('password') && !formData.has('profile')) {
+        setMessage('No changes to update');
+        setIsSuccess(false);
+        setLoading(false);
+        return;
+      }
+
+      // ✅ FIXED: changed /api/admin → /api/admins
+      const res = await fetch(`${API_URL}/api/admins/profile`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // Do NOT set Content-Type — browser sets it automatically with multipart boundary
+        },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('Server response:', text);
+        throw new Error(`Server responded with ${res.status}: ${text.substring(0, 100)}`);
+      }
+
+      const data = await res.json();
+
       setMessage('Profile updated successfully!');
       setIsSuccess(true);
-      setTimeout(() => { closeEdit(); }, 1600);
+
+      if (onAdminUpdate) onAdminUpdate(data.admin);
+      if (onProfileUpdate) onProfileUpdate(data.admin);
+
+      setTimeout(() => closeEdit(), 1600);
     } catch (err) {
+      console.error('Update error:', err);
       setMessage(err.message || 'Failed to update profile');
       setIsSuccess(false);
     } finally {
@@ -493,14 +557,35 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
     }
   };
 
+  // ── FIXED: /api/admins (plural) to match server.js mount point ──
   const handleDeletePicture = async () => {
     try {
-      await onDeleteProfilePicture();
+      // ✅ FIXED: changed /api/admin → /api/admins
+      const res = await fetch(`${API_URL}/api/admins/profile/picture`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('Delete response:', text);
+        throw new Error(`Server responded with ${res.status}`);
+      }
+
+      const data = await res.json();
+
       setShowDelete(false);
       setMessage('Profile picture removed successfully.');
       setIsSuccess(true);
+
+      if (onAdminUpdate) onAdminUpdate(data.admin);
+      if (onDeleteProfilePicture) onDeleteProfilePicture();
+
       setTimeout(() => setMessage(''), 3500);
     } catch (err) {
+      console.error('Delete error:', err);
       setMessage(err.message || 'Failed to remove profile picture');
       setIsSuccess(false);
     }
@@ -524,7 +609,7 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
       `}</style>
 
-      {/* Edit button row */}
+      {/* Edit button */}
       <div style={S.actionRow}>
         <button
           style={S.editBtn}
@@ -537,7 +622,7 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
         </button>
       </div>
 
-      {/* ── Profile card ── */}
+      {/* Profile card */}
       <div style={S.profileCard}>
         <div style={S.cardAccent} />
         <div style={S.cardInner}>
@@ -553,13 +638,13 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
               </div>
               <div style={S.onlineDot} />
             </div>
-
             <p style={S.adminName}>{admin?.email?.split('@')[0] || 'Admin'}</p>
             <span style={S.adminRolePill}>
               <span style={S.roleDot} />
-              {admin?.role || 'Administrator'}
+              {admin?.role === 'southadmin' ? 'South Signal Admin' :
+               admin?.role === 'centraladmin' ? 'Central Signal Admin' :
+               admin?.role || 'Administrator'}
             </span>
-
             {admin?.profile && (
               <button
                 style={S.removePhotoBtn}
@@ -604,7 +689,7 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
         </div>
       </div>
 
-      {/* ── Edit modal ── */}
+      {/* Edit modal */}
       {showEdit && (
         <div style={S.overlay} onClick={closeEdit}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
@@ -627,7 +712,7 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
                 </div>
               )}
 
-              <form onSubmit={handleUpdate}>
+              <div>
                 {/* Email */}
                 <div style={S.formField}>
                   <label style={S.fieldLabel}>
@@ -636,13 +721,11 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
                   </label>
                   <input
                     type="email"
-                    name="email"
                     style={focusStyle('email')}
                     value={profileForm.email}
                     onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))}
                     onFocus={() => setInputFocus('email')}
                     onBlur={() => setInputFocus('')}
-                    required
                   />
                   <span style={S.fieldHint}>Your administrative email address</span>
                 </div>
@@ -655,7 +738,6 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
                   </label>
                   <input
                     type="password"
-                    name="password"
                     style={focusStyle('password')}
                     value={profileForm.password}
                     onChange={e => setProfileForm(p => ({ ...p, password: e.target.value }))}
@@ -675,8 +757,8 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
                   <input
                     type="file"
                     id="profile-file"
-                    accept="image/*"
-                    onChange={e => setProfileForm(p => ({ ...p, profile: e.target.files[0] }))}
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={handleFileChange}
                   />
                   <label
                     htmlFor="profile-file"
@@ -692,7 +774,25 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
                       Browse
                     </span>
                   </label>
-                  <span style={S.fieldHint}>Accepted: JPG, PNG, GIF — Max 5 MB</span>
+
+                  {/* Preview thumbnail */}
+                  {previewUrl && (
+                    <div style={S.previewWrap}>
+                      <img src={previewUrl} alt="Preview" style={S.previewImg} />
+                      <span style={S.previewName}>{profileForm.profile?.name}</span>
+                      <button
+                        onClick={() => {
+                          setPreviewUrl(null);
+                          setProfileForm(p => ({ ...p, profile: null }));
+                        }}
+                        style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                      >
+                        <Icon d={ICONS.x} size={14} color="#ef4444" strokeWidth={2} />
+                      </button>
+                    </div>
+                  )}
+
+                  <span style={S.fieldHint}>Accepted: JPG, PNG, GIF, WebP — Max 5 MB</span>
                 </div>
 
                 {/* Actions */}
@@ -700,20 +800,25 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
                   <button type="button" style={S.btnSecondary} onClick={closeEdit} disabled={loading}>
                     Cancel
                   </button>
-                  <button type="submit" style={{ ...S.btnPrimary, opacity: loading ? 0.7 : 1 }} disabled={loading}>
+                  <button
+                    type="button"
+                    style={{ ...S.btnPrimary, opacity: loading ? 0.7 : 1 }}
+                    disabled={loading}
+                    onClick={handleUpdate}
+                  >
                     {loading
-                      ? <><Icon d={ICONS.spinner} size={14} color="#fff" strokeWidth={2} /> Updating…</>
+                      ? <><Icon d={ICONS.spinner} size={14} color="#fff" strokeWidth={2} style={{ animation: 'spin 1s linear infinite' }} /> Updating…</>
                       : <><Icon d={ICONS.check} size={14} color="#fff" strokeWidth={2.5} /> Update Profile</>
                     }
                   </button>
                 </div>
-              </form>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Delete confirm modal ── */}
+      {/* Delete confirm modal */}
       {showDelete && (
         <div style={S.overlay} onClick={() => setShowDelete(false)}>
           <div style={{ ...S.modal, width: 420 }} onClick={e => e.stopPropagation()}>
@@ -738,7 +843,7 @@ const AdminProfiles = ({ admin, onProfileUpdate, onDeleteProfilePicture }) => {
         </div>
       )}
 
-      {/* ── Toast (outside modals) ── */}
+      {/* Toast */}
       {message && !showEdit && !showDelete && (
         <div style={S.toast}>
           <Icon d={isSuccess ? ICONS.check : ICONS.alert} size={14} color={isSuccess ? '#10b981' : '#f87171'} strokeWidth={2} />
