@@ -290,6 +290,7 @@ const Post = ({ adminRole, currentUser }) => {
     setFormData({ title:post.title, content:post.content, category:post.category, image:null, status:post.status, isPinned:post.isPinned });
     setImagePreview(post.image || null);
     setShowCreateModal(true);
+    if (showViewModal) setShowViewModal(false);
   };
 
   // ── View — with fallback to existing post data if API call fails ──
@@ -397,10 +398,10 @@ const Post = ({ adminRole, currentUser }) => {
 
   // ── Quick actions ──
   const QUICK_ACTIONS = [
-    { icon:<Icons.Edit size={22}/>,    label:'Edit Post',     sub:'Update your content,\nmedia or settings.',   action:() => selectedPost ? handleEdit(selectedPost) : null },
-    { icon:<Icons.Clock size={22}/>,   label:'Schedule Post', sub:'Plan your posts\nfor the best time.',        action:() => {} },
-    { icon:<Icons.BarChart size={22}/>,label:'View Insights', sub:'Track performance\nand engagement.',         action:() => {} },
-    { icon:<Icons.Trash size={22}/>,   label:'Delete Post',   sub:'Remove posts you\nno longer need.',          action:() => selectedPost ? handleDelete(selectedPost._id) : null, danger:true },
+    { icon:<Icons.Edit size={22}/>,    label:'Edit Post',     sub:'Update your content,\nmedia or settings.',   action:() => selectedPost ? handleEdit(selectedPost) : null, enabled:!!selectedPost },
+    { icon:<Icons.Clock size={22}/>,   label:'Schedule Post', sub:'Plan your posts\nfor the best time.',        action:() => {}, enabled:true },
+    { icon:<Icons.BarChart size={22}/>,label:'View Insights', sub:'Track performance\nand engagement.',         action:() => {}, enabled:true },
+    { icon:<Icons.Trash size={22}/>,   label:'Delete Post',   sub:'Remove posts you\nno longer need.',          action:() => selectedPost ? handleDelete(selectedPost._id) : null, enabled:!!selectedPost, danger:true },
   ];
 
   if (loading) return (
@@ -424,7 +425,9 @@ const Post = ({ adminRole, currentUser }) => {
         .pg-btn:hover  { border-color:#1877F2; color:#1877F2; }
         .pg-btn.active { background:#1877F2; color:#fff; border-color:#1877F2; }
         .qa-card { display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px 12px; background:#fff; border-radius:12px; border:1.5px solid #E4E6EB; cursor:pointer; transition:all .15s; flex:1; min-width:0; }
-        .qa-card:hover        { border-color:#1877F2; box-shadow:0 2px 10px rgba(24,119,242,.1); }
+        .qa-card:hover { border-color:#1877F2; box-shadow:0 2px 10px rgba(24,119,242,.1); transform:translateY(-1px); }
+        .qa-card.disabled { opacity:0.5; cursor:not-allowed; }
+        .qa-card.disabled:hover { border-color:#E4E6EB; transform:none; box-shadow:none; }
         .qa-card.danger:hover { border-color:#DC2626; box-shadow:0 2px 10px rgba(220,38,38,.1); }
       `}</style>
 
@@ -479,10 +482,10 @@ const Post = ({ adminRole, currentUser }) => {
             ))}
           </div>
 
-          {/* Column headers */}
+          {/* Column headers - FIXED ALIGNMENT */}
           <div style={{ display:'flex', alignItems:'center', padding:'10px 20px', background:'#F8F9FA', borderBottom:'1px solid #F0F2F5' }}>
-            <div style={{ width:88, flexShrink:0 }}/>
-            <div style={{ flex:1, fontSize:11, fontWeight:700, color:'#8A8A8A', textTransform:'uppercase', letterSpacing:'0.05em' }}>Post</div>
+            <div style={{ width:88, flexShrink:0, textAlign:'left' }}/>
+            <div style={{ flex:1, textAlign:'left', fontSize:11, fontWeight:700, color:'#8A8A8A', textTransform:'uppercase', letterSpacing:'0.05em' }}>Post</div>
             <div style={{ width:80, textAlign:'center', fontSize:11, fontWeight:700, color:'#8A8A8A', textTransform:'uppercase', letterSpacing:'0.05em' }}>Reach</div>
             <div style={{ width:110, textAlign:'center', fontSize:11, fontWeight:700, color:'#8A8A8A', textTransform:'uppercase', letterSpacing:'0.05em' }}>Engagement</div>
             {isAdmin() && <div style={{ width:40, flexShrink:0 }}/>}
@@ -519,9 +522,9 @@ const Post = ({ adminRole, currentUser }) => {
                       }
                     </div>
 
-                    {/* Info */}
-                    <div style={{ flex:1, minWidth:0, marginRight:16, cursor:'pointer' }} onClick={() => handleView(post)}>
-                      <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:3, flexWrap:'wrap' }}>
+                    {/* Info - FIXED LEFT ALIGNMENT */}
+                    <div style={{ flex:1, minWidth:0, marginRight:16, cursor:'pointer', textAlign:'left' }} onClick={() => handleView(post)}>
+                      <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:3, flexWrap:'wrap', justifyContent:'flex-start' }}>
                         {post.isPinned && (
                           <span style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#FEF3C7', color:'#92400E', padding:'1px 5px', borderRadius:20, fontSize:10, fontWeight:700 }}>
                             <Icons.Pin size={8}/> Pinned
@@ -532,13 +535,13 @@ const Post = ({ adminRole, currentUser }) => {
                         )}
                         <CatBadge category={post.category}/>
                       </div>
-                      <div style={{ fontWeight:700, fontSize:14, color:'#1C1E21', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', marginBottom:2 }}>
+                      <div style={{ fontWeight:700, fontSize:14, color:'#1C1E21', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', marginBottom:2, textAlign:'left' }}>
                         {post.title}
                       </div>
-                      <div style={{ fontSize:12, color:'#65676B', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', marginBottom:4 }}>
+                      <div style={{ fontSize:12, color:'#65676B', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', marginBottom:4, textAlign:'left' }}>
                         {post.content.slice(0,100)}{post.content.length > 100 ? '…' : ''}
                       </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:5, justifyContent:'flex-start' }}>
                         <Avatar role={adminRole_} adminName={adminName} size={16}/>
                         <span style={{ fontSize:11, color:'#8A8A8A' }}>{adminName}</span>
                         <span style={{ color:'#D0D3D9', fontSize:9 }}>·</span>
@@ -547,7 +550,7 @@ const Post = ({ adminRole, currentUser }) => {
                       </div>
                     </div>
 
-                    {/* Reach */}
+                    {/* Reach - CENTER ALIGNED */}
                     <div style={{ width:80, textAlign:'center', flexShrink:0 }}>
                       <div style={{ fontSize:16, fontWeight:800, color:'#1C1E21' }}>
                         {views >= 1000 ? `${(views/1000).toFixed(1)}K` : views}
@@ -555,7 +558,7 @@ const Post = ({ adminRole, currentUser }) => {
                       <div style={{ fontSize:11, color:'#8A8A8A' }}>views</div>
                     </div>
 
-                    {/* Engagement */}
+                    {/* Engagement - CENTER ALIGNED */}
                     <div style={{ width:110, textAlign:'center', flexShrink:0 }}>
                       <div style={{ fontSize:16, fontWeight:800, color:'#1C1E21' }}>{likeCount + cmtCount}</div>
                       <div style={{ fontSize:11, color:'#8A8A8A', display:'flex', justifyContent:'center', alignItems:'center', gap:6, marginTop:1 }}>
@@ -564,7 +567,7 @@ const Post = ({ adminRole, currentUser }) => {
                       </div>
                     </div>
 
-                    {/* Actions — uses proper component, no hook-in-map */}
+                    {/* Actions */}
                     {isAdmin() && (
                       <PostRowActions
                         post={post}
@@ -608,18 +611,33 @@ const Post = ({ adminRole, currentUser }) => {
           )}
         </div>
 
-        {/* ── Quick Actions bar ── */}
+        {/* ── Quick Actions bar - FIXED FUNCTIONALITY ── */}
         <div style={{ background:'#fff', borderRadius:14, boxShadow:'0 1px 4px rgba(0,0,0,.08)', padding:'20px 24px' }}>
-          <h3 style={{ margin:'0 0 14px', fontSize:14, fontWeight:700, color:'#1C1E21', textAlign:'center' }}>Manage your posts</h3>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+            <h3 style={{ margin:0, fontSize:14, fontWeight:700, color:'#1C1E21' }}>Manage your posts</h3>
+            {selectedPost && (
+              <span style={{ fontSize:11, color:'#65676B', background:'#F0F2F5', padding:'4px 8px', borderRadius:20 }}>
+                Selected: "{selectedPost.title?.slice(0,30)}"
+              </span>
+            )}
+          </div>
           <div style={{ display:'flex', gap:12 }}>
             {QUICK_ACTIONS.map((qa, i) => (
-              <div key={i} className={`qa-card${qa.danger?' danger':''}`} onClick={qa.action}>
+              <div 
+                key={i} 
+                className={`qa-card${qa.danger?' danger':''}${!qa.enabled ? ' disabled' : ''}`} 
+                onClick={() => qa.enabled && qa.action && qa.action()}
+                style={{ cursor: qa.enabled ? 'pointer' : 'not-allowed', opacity: qa.enabled ? 1 : 0.5 }}
+              >
                 <div style={{ width:44, height:44, borderRadius:12, background:qa.danger?'#FEE2E2':'#E7F0FD', display:'flex', alignItems:'center', justifyContent:'center', color:qa.danger?'#DC2626':'#1877F2' }}>
                   {qa.icon}
                 </div>
                 <div style={{ textAlign:'center' }}>
                   <div style={{ fontSize:13, fontWeight:700, color:qa.danger?'#DC2626':'#1C1E21', marginBottom:2 }}>{qa.label}</div>
                   <div style={{ fontSize:11, color:'#8A8A8A', lineHeight:1.4, whiteSpace:'pre-line' }}>{qa.sub}</div>
+                  {!qa.enabled && qa.label === 'Edit Post' && (
+                    <div style={{ fontSize:10, color:'#DC2626', marginTop:4 }}>Select a post first</div>
+                  )}
                 </div>
               </div>
             ))}
@@ -627,12 +645,12 @@ const Post = ({ adminRole, currentUser }) => {
         </div>
       </div>
 
-      {/* ════════════ CREATE / EDIT MODAL ════════════ */}
+      {/* ════════════ CREATE / EDIT MODAL - FIXED ALIGNMENT ════════════ */}
       {showCreateModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:12 }}
           onClick={() => setShowCreateModal(false)}>
           <div className="pm-modal" onClick={e => e.stopPropagation()}
-            style={{ background:'#fff', borderRadius:14, padding:22, width:'100%', maxWidth:540, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 8px 40px rgba(0,0,0,.22)', fontFamily:FF }}>
+            style={{ background:'#fff', borderRadius:14, padding:22, width:'100%', maxWidth:540, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 8px 40px rgba(0,0,0,.22)', fontFamily:FF, textAlign:'left' }}>
 
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, paddingBottom:14, borderBottom:'1px solid #E4E6EB' }}>
               <h3 style={{ margin:0, fontSize:17, fontWeight:800, color:'#1C1E21' }}>
@@ -700,7 +718,7 @@ const Post = ({ adminRole, currentUser }) => {
                   </div>
                 )}
               </div>
-              <div style={{ marginBottom:16, padding:'10px 12px', background:'#F0F2F5', borderRadius:8 }}>
+              <div style={{ marginBottom:16, padding:'10px 12px', background:'#F0F2F5', borderRadius:8, textAlign:'left' }}>
                 <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', userSelect:'none' }}
                   onClick={() => setFormData(f => ({...f, isPinned:!f.isPinned}))}>
                   <div style={{ width:36, height:20, background:formData.isPinned?'#1877F2':'#BCC0C4', borderRadius:10, position:'relative', transition:'background .2s', flexShrink:0 }}>
@@ -727,7 +745,7 @@ const Post = ({ adminRole, currentUser }) => {
         </div>
       )}
 
-      {/* ════════════ VIEW MODAL ════════════ */}
+      {/* ════════════ VIEW MODAL - FIXED ALIGNMENT ════════════ */}
       {showViewModal && selectedPost && (() => {
         const adminRoleFromPost = getAdminRole(selectedPost);
         const adm       = getAdm(adminRoleFromPost);
@@ -738,7 +756,7 @@ const Post = ({ adminRole, currentUser }) => {
           <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:12 }}
             onClick={() => setShowViewModal(false)}>
             <div className="pm-modal" onClick={e => e.stopPropagation()}
-              style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:600, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 8px 40px rgba(0,0,0,.22)', fontFamily:FF }}>
+              style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:600, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 8px 40px rgba(0,0,0,.22)', fontFamily:FF, textAlign:'left' }}>
 
               {selectedPost.isPinned && (
                 <div style={{ background:'#FEF3C7', padding:'6px 18px', fontSize:11, fontWeight:700, color:'#92400E', display:'flex', alignItems:'center', gap:5 }}>
@@ -785,8 +803,8 @@ const Post = ({ adminRole, currentUser }) => {
                   </div>
                 </div>
 
-                <h2 style={{ margin:'0 0 8px', fontSize:18, fontWeight:800, color:'#1C1E21', lineHeight:1.3 }}>{selectedPost.title}</h2>
-                <p style={{ margin:'0 0 12px', fontSize:14, color:'#3E4147', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{selectedPost.content}</p>
+                <h2 style={{ margin:'0 0 8px', fontSize:18, fontWeight:800, color:'#1C1E21', lineHeight:1.3, textAlign:'left' }}>{selectedPost.title}</h2>
+                <p style={{ margin:'0 0 12px', fontSize:14, color:'#3E4147', lineHeight:1.7, whiteSpace:'pre-wrap', textAlign:'left' }}>{selectedPost.content}</p>
 
                 {selectedPost.image && (
                   <div style={{ borderRadius:10, overflow:'hidden', marginBottom:12, cursor:'zoom-in' }}
@@ -816,11 +834,11 @@ const Post = ({ adminRole, currentUser }) => {
                   <ReactionBtn icon={<Icons.MessageSquare size={16}/>} label="Comment" count={0} active={false} color="#1877F2" onClick={() => {}}/>
                 </div>
 
-                {/* Comments */}
+                {/* Comments - FIXED LEFT ALIGNMENT */}
                 {selectedPost.comments?.length > 0 && (
                   <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:6 }}>
                     {selectedPost.comments.map((comment, idx) => (
-                      <div key={comment._id || idx} style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
+                      <div key={comment._id || idx} style={{ display:'flex', gap:8, alignItems:'flex-start', textAlign:'left' }}>
                         <Avatar role={comment.user?.role} adminName={comment.user?.fullName||comment.user?.username} size={30}/>
                         <div style={{ flex:1, background:'#F0F2F5', borderRadius:10, padding:'7px 10px' }}>
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:2 }}>
@@ -832,15 +850,15 @@ const Post = ({ adminRole, currentUser }) => {
                               </button>
                             )}
                           </div>
-                          <p style={{ margin:0, fontSize:13, color:'#3E4147', lineHeight:1.5 }}>{comment.content}</p>
-                          <span style={{ fontSize:10, color:'#BCC0C4', marginTop:3, display:'block' }}>{timeAgo(comment.createdAt)}</span>
+                          <p style={{ margin:0, fontSize:13, color:'#3E4147', lineHeight:1.5, textAlign:'left' }}>{comment.content}</p>
+                          <span style={{ fontSize:10, color:'#BCC0C4', marginTop:3, display:'block', textAlign:'left' }}>{timeAgo(comment.createdAt)}</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* Add comment */}
+                {/* Add comment - FIXED LEFT ALIGNMENT */}
                 <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:12 }}>
                   <Avatar role={adminRole} adminName={currentUser?.fullName||currentUser?.username} size={32}/>
                   <div style={{ flex:1, display:'flex', gap:6, alignItems:'flex-end', background:'#F0F2F5', borderRadius:20, padding:'7px 10px' }}>

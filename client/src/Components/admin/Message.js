@@ -103,10 +103,10 @@ const buildCSS = (t) => `
 }
 
 .msg-bubble { animation: msgIn 0.18s ease both; max-width: 100%; word-break: break-word; }
-.msg-row { display: flex; align-items: flex-end; gap: 7px; }
-.msg-row.sent  { align-self: flex-end; flex-direction: row-reverse; max-width: 68%; }
-.msg-row.recv  { align-self: flex-start; max-width: 68%; }
-.msg-row:hover .msg-del { opacity: 1 !important; }
+.msg-row { display: flex; align-items: flex-end; gap: 7px; margin-bottom: 8px; }
+.msg-row.sent  { justify-content: flex-end; }
+.msg-row.recv  { justify-content: flex-start; }
+.msg-row:hover .msg-actions { opacity: 1 !important; }
 
 .msg-input {
   flex: 1; background: ${t.surface2};
@@ -154,6 +154,7 @@ const buildCSS = (t) => `
   justify-content: center; padding: 7px; transition: all 0.12s;
 }
 .icon-btn:hover { background: ${t.surface2}; border-color: ${t.border}; color: ${t.text}; }
+.icon-btn.danger:hover { background: ${t.redBg}; border-color: ${t.red}33; color: ${t.red}; }
 
 .theme-btn {
   background: ${t.surface2}; border: 1px solid ${t.border}; border-radius: 20px;
@@ -168,6 +169,58 @@ const buildCSS = (t) => `
   border-radius: 8px; color: ${t.text}; font-family: inherit; font-size: 12px;
   padding: 7px 10px; outline: none; cursor: pointer; margin-bottom: 10px;
 }
+
+.attachment-preview {
+  display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;
+}
+.attachment-img {
+  width: 80px; height: 80px; border-radius: 8px;
+  object-fit: cover; border: 1px solid ${t.border};
+  cursor: pointer;
+}
+.attachment-doc {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: ${t.surface2};
+  border-radius: 8px; border: 1px solid ${t.border};
+  cursor: pointer;
+  text-decoration: none;
+}
+.msg-attachments {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+}
+.msg-image {
+  max-width: 200px; max-height: 150px; border-radius: 12px;
+  cursor: pointer; border: 1px solid ${t.border};
+}
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.9); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-image {
+  max-width: 90vw; max-height: 90vh;
+  object-fit: contain;
+}
+.modal-close {
+  position: absolute; top: 20px; right: 20px;
+  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px; color: white; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.15s;
+}
+.modal-close:hover { background: rgba(255,255,255,0.2); }
+.msg-actions {
+  display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s;
+}
+.remove-file-btn {
+  position: absolute; top: -8px; right: -8px;
+  background: ${t.red}; color: white;
+  border: none; border-radius: 50%;
+  width: 20px; height: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.15s;
+}
+.remove-file-btn:hover { opacity: 0.85; }
 `;
 
 /* ─── SVG ICONS ──────────────────────────────────────────────── */
@@ -180,21 +233,27 @@ const Ic = ({ d, size = 16, color = 'currentColor', sw = 1.8, fill = 'none' }) =
 );
 
 const P = {
-  msg:    "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
-  send:   "M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z",
-  search: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
-  trash:  ["M3 6h18","M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"],
-  check:  "M20 6L9 17l-5-5",
-  checks: ["M18 6L7 17l-4-4","M22 10l-5 5-2-2"],
-  x:      ["M18 6L6 18","M6 6l12 12"],
-  alert:  ["M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z","M12 9v4","M12 17h.01"],
-  pin:    ["M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z","M12 13a3 3 0 100-6 3 3 0 000 6z"],
-  spin:   "M21 12a9 9 0 11-6.2-8.6",
-  chevR:  "M9 18l6-6-6-6",
-  moon:   ["M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"],
-  sun:    ["M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42","M12 17a5 5 0 100-10 5 5 0 000 10z"],
-  refresh:"M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15",
-  inbox:  ["M22 12h-6l-2 3h-4l-2-3H2","M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"],
+  msg:        "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
+  send:       "M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z",
+  search:     "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
+  trash:      ["M3 6h18","M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"],
+  check:      "M20 6L9 17l-5-5",
+  checks:     ["M18 6L7 17l-4-4","M22 10l-5 5-2-2"],
+  x:          ["M18 6L6 18","M6 6l12 12"],
+  alert:      ["M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z","M12 9v4","M12 17h.01"],
+  pin:        ["M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z","M12 13a3 3 0 100-6 3 3 0 000 6z"],
+  spin:       "M21 12a9 9 0 11-6.2-8.6",
+  moon:       ["M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"],
+  sun:        ["M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42","M12 17a5 5 0 100-10 5 5 0 000 10z"],
+  refresh:    "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15",
+  inbox:      ["M22 12h-6l-2 3h-4l-2-3H2","M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"],
+  attach:     ["M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"],
+  edit:       ["M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7","M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"],
+  file:       ["M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z","M14 2v6h6","M16 13H8","M16 17H8","M10 9H8"],
+  image:      ["M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V5a2 2 0 012-2h18a2 2 0 012 2v14z","M23 15l-4-4-6 6-4-4-6 6","M6.5 9a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"],
+  noSearch:   ["M10 10m-7 0a7 7 0 1014 0 7 7 0 10-14 0","M21 21l-6-6","M7 10h6","M10 7v6"],
+  mailOpen:   ["M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z","M9 22V12h6v10"],
+  zoomIn:     ["M11 8v6M8 11h6","M11 3a8 8 0 100 16 8 8 0 000-16z","M21 21l-4.35-4.35"],
 };
 
 /* ─── HELPERS ────────────────────────────────────────────────── */
@@ -272,10 +331,16 @@ const Message = () => {
   const [currentUser, setCurrentUser]       = useState(null);
   const [unreadCount, setUnreadCount]       = useState(0);
   const [filterBarangay, setFilterBarangay] = useState('all');
+  const [selectedFiles, setSelectedFiles]   = useState([]);
+  const [uploading, setUploading]           = useState(false);
+  const [previewImage, setPreviewImage]     = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [editText, setEditText]             = useState('');
 
   const messagesEndRef  = useRef(null);
   const selectedUserRef = useRef(null);
   const inputRef        = useRef(null);
+  const fileInputRef    = useRef(null);
   const navigate        = useNavigate();
 
   const t = isDark ? dark : light;
@@ -288,7 +353,6 @@ const Message = () => {
   };
   const hdrs = useCallback(() => ({
     'Authorization': `Bearer ${token()}`,
-    'Content-Type': 'application/json',
   }), []);
 
   /* boot */
@@ -297,7 +361,12 @@ const Message = () => {
     try { setCurrentUser(JSON.parse(localStorage.getItem('adminData')||'{}')); } catch {}
     fetchConversations();
     fetchUnread();
+    setupSocketListeners();
   }, []);
+
+  const setupSocketListeners = () => {
+    // Socket.IO implementation placeholder — using polling fallback
+  };
 
   /* poll */
   useEffect(() => {
@@ -328,15 +397,12 @@ const Message = () => {
       const r = await fetch(`${API_URL}/api/messages/conversations`, { headers: hdrs() });
       if (r.ok) {
         const data = await r.json();
-        console.log('[Messages] Conversations loaded:', data.length);
         setConversations(data);
         if (!silent) setError('');
       } else {
-        console.error('[Messages] Fetch failed:', r.status);
         if (!silent) setError('Could not load conversations.');
       }
     } catch(e) {
-      console.error('[Messages] Network error:', e);
       if (!silent) setError('Network error.');
     } finally {
       if (!silent) setLoadingConvs(false);
@@ -378,25 +444,109 @@ const Message = () => {
   const sendMessage = async (e) => {
     e?.preventDefault();
     const txt = newMessage.trim();
-    if (!txt || !selectedUser || sending) return;
-    setNewMessage('');
+    if ((!txt && selectedFiles.length === 0) || !selectedUser || sending || uploading) return;
+
     setSending(true);
+    setUploading(true);
+
     try {
+      const formData = new FormData();
+      formData.append('receiverId', selectedUser._id);
+      if (txt) formData.append('text', txt);
+
+      for (let i = 0; i < selectedFiles.length; i++) {
+        formData.append('attachments', selectedFiles[i]);
+      }
+
       const r = await fetch(`${API_URL}/api/messages/send`, {
-        method:'POST', headers: hdrs(),
-        body: JSON.stringify({ receiverId: selectedUser._id, text: txt }),
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token()}` },
+        body: formData
       });
+
       if (r.ok) {
         const data = await r.json();
         setMessages(prev => [...prev, data.message]);
         fetchConversations(true);
+        setNewMessage('');
+        setSelectedFiles([]);
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior:'smooth' }), 80);
       } else {
-        setNewMessage(txt);
-        setError('Failed to send.');
+        const err = await r.json();
+        setError(err.message || 'Failed to send.');
       }
-    } catch { setNewMessage(txt); setError('Network error.'); }
-    finally { setSending(false); inputRef.current?.focus(); }
+    } catch (err) {
+      setError('Network error.');
+    } finally {
+      setSending(false);
+      setUploading(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const editMessage = async (messageId, newText) => {
+    try {
+      const r = await fetch(`${API_URL}/api/messages/edit/${messageId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text: newText })
+      });
+
+      if (r.ok) {
+        const data = await r.json();
+        setMessages(prev => prev.map(msg =>
+          msg._id === messageId ? data.message : msg
+        ));
+        fetchConversations(true);
+        setEditingMessage(null);
+        setEditText('');
+      } else {
+        const err = await r.json();
+        setError(err.message || 'Failed to edit message');
+      }
+    } catch (err) {
+      setError('Network error');
+    }
+  };
+
+  const deleteMessage = async (messageId) => {
+    if (!window.confirm('Delete this message?')) return;
+
+    try {
+      const r = await fetch(`${API_URL}/api/messages/${messageId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token()}` }
+      });
+
+      if (r.ok) {
+        setMessages(prev => prev.filter(msg => msg._id !== messageId));
+        fetchConversations(true);
+      } else {
+        setError('Could not delete message.');
+      }
+    } catch (err) {
+      setError('Network error.');
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
+    const validFiles = files.filter(file => {
+      const isValidType = file.type.startsWith('image/') ||
+                          file.type === 'application/pdf' ||
+                          file.type.includes('word') ||
+                          file.type.includes('document');
+      const isValidSize = file.size <= 50 * 1024 * 1024;
+      return isValidType && isValidSize;
+    });
+    setSelectedFiles(prev => [...prev, ...validFiles]);
+  };
+
+  const removeFile = (index) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const searchUsers = async (q) => {
@@ -424,26 +574,186 @@ const Message = () => {
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  const deleteMessage = async (id) => {
-    if (!window.confirm('Delete this message?')) return;
-    try {
-      const r = await fetch(`${API_URL}/api/messages/${id}`, { method:'DELETE', headers: hdrs() });
-      if (r.ok) { setMessages(prev => prev.filter(m => m._id !== id)); fetchConversations(true); }
-      else setError('Could not delete message.');
-    } catch { setError('Network error.'); }
-  };
-
-  /* FIX: conversations always show — filter only when explicitly changed */
   const filteredConvs = filterBarangay === 'all'
     ? conversations
     : conversations.filter(c => (c.user?.barangay||'').toLowerCase().includes(filterBarangay.toLowerCase()));
 
   const currentUserId = myId();
-  const isAdmin = currentUser?.role === 'admin';
-  const rm = currentUser ? roleMeta(currentUser.role, t) : null;
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  };
+
+  /* ─── Render Message with Attachments and Actions ─── */
+  const renderMessageWithAttachments = (msg, idx) => {
+    const isSent = msg.senderId === currentUserId;
+    const hasAttachments = msg.attachments && msg.attachments.length > 0;
+    const hasText = msg.text && msg.text.trim();
+    const isEditing = editingMessage?._id === msg._id;
+
+    if (!hasText && !hasAttachments) return null;
+
+    return (
+      <div key={msg._id || idx} className={`msg-row ${isSent ? 'sent' : 'recv'}`}>
+        {!isSent && (
+          <div style={{ width: 28, flexShrink: 0 }}>
+            <Avatar user={selectedUser} size={28} t={t}/>
+          </div>
+        )}
+
+        <div className="msg-bubble">
+          <div style={{
+            padding: '9px 13px',
+            borderRadius: isSent ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+            background: isSent ? t.sentBubble : t.recvBubble,
+            border: isSent ? 'none' : `1px solid ${t.border}`,
+            boxShadow: t.shadow,
+            position: 'relative'
+          }}>
+
+            {/* Edit Mode */}
+            {isEditing ? (
+              <div>
+                <textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: t.surface2,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 8,
+                    color: t.text,
+                    padding: 8,
+                    fontSize: 13.5,
+                    fontFamily: 'inherit',
+                    resize: 'vertical'
+                  }}
+                  rows={2}
+                  autoFocus
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => { setEditingMessage(null); setEditText(''); }}
+                    style={{
+                      padding: '4px 10px',
+                      background: t.surface3,
+                      border: `1px solid ${t.border}`,
+                      borderRadius: 6,
+                      color: t.text,
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontFamily: 'inherit',
+                      display: 'flex', alignItems: 'center', gap: 5
+                    }}
+                  >
+                    <Ic d={P.x} size={11} color={t.textSub}/>
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => editMessage(msg._id, editText)}
+                    style={{
+                      padding: '4px 10px',
+                      background: t.accent,
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#fff',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontFamily: 'inherit',
+                      display: 'flex', alignItems: 'center', gap: 5
+                    }}
+                  >
+                    <Ic d={P.check} size={11} color="#fff"/>
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Text Message */}
+                {hasText && (
+                  <div style={{ fontSize: 13.5, lineHeight: 1.55, color: isSent ? t.sentText : t.recvText }}>
+                    {msg.text}
+                    {msg.isEdited && (
+                      <span style={{ fontSize: 10, marginLeft: 6, opacity: 0.6 }}>(edited)</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Attachments */}
+                {hasAttachments && (
+                  <div className="msg-attachments">
+                    {msg.attachments.map((att, i) => (
+                      att.type === 'image' ? (
+                        <div key={i} style={{ position: 'relative', display: 'inline-block' }}>
+                          <img
+                            src={att.thumbnailUrl || att.url}
+                            alt={att.originalName}
+                            className="msg-image"
+                            onClick={() => setPreviewImage(att.url)}
+                          />
+                          <div style={{
+                            position: 'absolute', bottom: 6, right: 6,
+                            background: 'rgba(0,0,0,0.5)', borderRadius: 6,
+                            padding: '3px 5px', display: 'flex', alignItems: 'center',
+                            gap: 3, cursor: 'pointer'
+                          }} onClick={() => setPreviewImage(att.url)}>
+                            <Ic d={P.zoomIn} size={11} color="#fff"/>
+                          </div>
+                        </div>
+                      ) : (
+                        <a
+                          key={i}
+                          href={att.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="attachment-doc"
+                          style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}
+                        >
+                          <Ic d={P.file} size={16} color={t.accent}/>
+                          <span style={{ fontSize: 12, color: t.text }}>{att.originalName}</span>
+                        </a>
+                      )
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4,
+              fontSize: 10, color: isSent ? 'rgba(255,255,255,0.5)' : t.textMuted }}>
+              <span>{fmtTime(msg.timestamp)}</span>
+              {isSent && (
+                <Ic d={msg.read ? P.checks : P.check}
+                  size={11} color={msg.read ? (isDark ? '#93C5FD' : '#60A5FA') : 'rgba(255,255,255,0.45)'}/>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons — only for sent messages, not in edit mode */}
+        {isSent && !isEditing && (
+          <div className="msg-actions">
+            <button
+              className="icon-btn"
+              onClick={() => { setEditingMessage(msg); setEditText(msg.text); }}
+              style={{ padding: 5 }}
+              title="Edit message"
+            >
+              <Ic d={P.edit} size={12} color={t.textSub}/>
+            </button>
+            <button
+              className="icon-btn danger"
+              onClick={() => deleteMessage(msg._id)}
+              style={{ padding: 5 }}
+              title="Delete message"
+            >
+              <Ic d={P.trash} size={12} color={t.red}/>
+            </button>
+          </div>
+        )}
+      </div>
+    );
   };
 
   /* ─── RENDER ─── */
@@ -455,7 +765,6 @@ const Message = () => {
         {/* TOP BAR */}
         <div style={{ padding:'12px 18px', borderBottom:`1px solid ${t.border}`,
           background:t.surface, display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
-          {/* left: icon + title */}
           <div style={{ display:'flex', alignItems:'center', gap:10, flex:1, minWidth:0 }}>
             <div style={{ width:34, height:34, borderRadius:10, background:t.accentBg,
               border:`1px solid ${t.accentBdr}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -471,23 +780,23 @@ const Message = () => {
                   </span>
                 )}
               </div>
-              {currentUser && rm && (
+              {currentUser && (
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2 }}>
                   <div style={{ width:5, height:5, borderRadius:'50%', background:t.green }}/>
                   <span style={{ fontSize:11, color:t.textMuted, overflow:'hidden',
                     textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                     {currentUser.email}
                   </span>
-                  <span className="badge" style={{ background:rm.bg, color:rm.color }}>{rm.label}</span>
+                  <span className="badge" style={{ background:roleMeta(currentUser.role,t).bg, color:roleMeta(currentUser.role,t).color }}>
+                    {roleMeta(currentUser.role,t).label}
+                  </span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* right: theme toggle + refresh */}
           <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
-            <button className="theme-btn" onClick={() => setIsDark(d => !d)}
-              title="Toggle theme">
+            <button className="theme-btn" onClick={() => setIsDark(d => !d)} title="Toggle theme">
               <Ic d={isDark ? P.sun : P.moon} size={13} color={t.textSub}/>
               <span>{isDark ? 'Light' : 'Dark'}</span>
             </button>
@@ -518,9 +827,8 @@ const Message = () => {
           <div style={{ width:288, minWidth:288, display:'flex', flexDirection:'column',
             background:t.surface, borderRight:`1px solid ${t.border}`, overflow:'hidden' }}>
 
-            {/* sidebar top */}
             <div style={{ padding:'12px 12px 10px', borderBottom:`1px solid ${t.border}`, flexShrink:0 }}>
-              {isAdmin && (
+              {currentUser?.role === 'admin' && (
                 <select className="filter-select" value={filterBarangay}
                   onChange={e => setFilterBarangay(e.target.value)}>
                   <option value="all">All Barangays</option>
@@ -543,7 +851,6 @@ const Message = () => {
               </div>
             </div>
 
-            {/* list header */}
             <div style={{ padding:'8px 14px', display:'flex', alignItems:'center',
               justifyContent:'space-between', flexShrink:0 }}>
               <span style={{ fontSize:10, fontWeight:600, color:t.textMuted,
@@ -555,12 +862,9 @@ const Message = () => {
               </span>
             </div>
 
-            {/* list body */}
             <div style={{ flex:1, overflowY:'auto' }}>
-              {/* skeletons */}
               {loadingConvs && !searchQuery && [0,1,2,3].map(i => <ConvSkeleton key={i} t={t}/>)}
 
-              {/* search loading */}
               {searchLoading && (
                 <div style={{ display:'flex', alignItems:'center', gap:8, padding:'14px',
                   fontSize:12, color:t.textSub }}>
@@ -571,7 +875,6 @@ const Message = () => {
                 </div>
               )}
 
-              {/* search results */}
               {!searchLoading && searchResults.length > 0 && searchQuery && searchResults.map((u, i) => (
                 <div key={u._id} className={`conv-item${selectedUser?._id === u._id ? ' active' : ''}`}
                   style={{ animationDelay:`${i*0.04}s` }} onClick={() => selectUser(u)}>
@@ -598,16 +901,20 @@ const Message = () => {
                 </div>
               ))}
 
-              {/* no results */}
               {!searchLoading && searchQuery && searchResults.length === 0 && (
                 <div style={{ padding:'32px 16px', textAlign:'center' }}>
-                  <div style={{ fontSize:28, marginBottom:8 }}>🔍</div>
+                  <div style={{ display:'flex', justifyContent:'center', marginBottom:12 }}>
+                    <div style={{ width:48, height:48, borderRadius:14, background:t.surface2,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      border:`1px solid ${t.border}` }}>
+                      <Ic d={P.noSearch} size={22} color={t.textMuted}/>
+                    </div>
+                  </div>
                   <p style={{ fontSize:13, color:t.textSub, fontWeight:500 }}>No users found</p>
                   <p style={{ fontSize:11, color:t.textMuted, marginTop:4 }}>Try a different name or email</p>
                 </div>
               )}
 
-              {/* conversation list */}
               {!searchQuery && !loadingConvs && (
                 filteredConvs.length === 0 ? (
                   <div style={{ padding:'48px 16px', textAlign:'center',
@@ -624,6 +931,9 @@ const Message = () => {
                   filteredConvs.map((conv, i) => {
                     const isActive  = selectedUser?._id === conv.user._id;
                     const hasUnread = conv.unread || conv.unreadCount > 0;
+                    const hasAttachment = conv.lastMessage?.hasAttachment;
+                    const lastMsgText = conv.lastMessage?.text ||
+                      (hasAttachment ? 'Attachment' : '');
                     return (
                       <div key={conv.user._id}
                         className={`conv-item${isActive ? ' active' : ''}`}
@@ -647,13 +957,17 @@ const Message = () => {
                               {displayName(conv.user)}
                             </span>
                             <span style={{ fontSize:10, color:t.textMuted, marginLeft:6, flexShrink:0 }}>
-                              {fmtRelative(conv.lastMessage?.timestamp || conv.lastMessage?.createdAt)}
+                              {fmtRelative(conv.lastMessage?.timestamp)}
                             </span>
                           </div>
                           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                             <span style={{ fontSize:11.5, color: hasUnread ? t.textSub : t.textMuted,
-                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>
-                              {conv.lastMessage?.text?.substring(0,44)}{conv.lastMessage?.text?.length > 44 ? '…' : ''}
+                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1,
+                              display:'flex', alignItems:'center', gap:4 }}>
+                              {hasAttachment && !conv.lastMessage?.text && (
+                                <Ic d={P.attach} size={10} color={t.textMuted}/>
+                              )}
+                              {lastMsgText?.substring(0,44)}{lastMsgText?.length > 44 ? '…' : ''}
                             </span>
                             {conv.unreadCount > 0 && (
                               <span style={{ background:t.accent, color:'#fff', fontSize:9, fontWeight:700,
@@ -728,67 +1042,59 @@ const Message = () => {
                     <div style={{ width:60, height:60, borderRadius:18, background:t.surface,
                       display:'flex', alignItems:'center', justifyContent:'center',
                       border:`1px solid ${t.border}` }}>
-                      <Ic d={P.msg} size={26} color={t.textMuted}/>
+                      <Ic d={P.mailOpen} size={26} color={t.textMuted}/>
                     </div>
                     <p style={{ fontSize:14, fontWeight:600, color:t.textSub }}>No messages yet</p>
                     <p style={{ fontSize:12, color:t.textMuted }}>Say hello to {displayName(selectedUser)}</p>
                   </div>
                 ) : (
-                  messages.map((msg, idx) => {
-                    const isSent = msg.senderId === currentUserId;
-                    const showAvt = !isSent && (idx === 0 || messages[idx-1]?.senderId !== msg.senderId);
-                    return (
-                      <div key={msg._id||idx}
-                        className={`msg-row ${isSent ? 'sent' : 'recv'}`}>
-                        {/* recv avatar */}
-                        {!isSent && (
-                          <div style={{ width:28, flexShrink:0 }}>
-                            {showAvt && <Avatar user={selectedUser} size={28} t={t}/>}
-                          </div>
-                        )}
-
-                        <div className="msg-bubble">
-                          <div style={{
-                            padding:'9px 13px',
-                            borderRadius: isSent ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
-                            background: isSent ? t.sentBubble : t.recvBubble,
-                            border: isSent ? 'none' : `1px solid ${t.border}`,
-                            boxShadow: t.shadow,
-                          }}>
-                            <div style={{ fontSize:13.5, lineHeight:1.55,
-                              color: isSent ? t.sentText : t.recvText }}>
-                              {msg.text}
-                            </div>
-                            <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:4,
-                              fontSize:10, color: isSent ? 'rgba(255,255,255,0.5)' : t.textMuted }}>
-                              <span>{fmtTime(msg.timestamp||msg.createdAt)}</span>
-                              {isSent && (
-                                <Ic d={msg.read ? P.checks : P.check}
-                                  size={11} color={msg.read ? (isDark ? '#93C5FD' : '#60A5FA') : 'rgba(255,255,255,0.45)'}/>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* delete */}
-                        {isSent && (
-                          <button className="msg-del icon-btn"
-                            onClick={() => deleteMessage(msg._id)}
-                            style={{ opacity:0, padding:5, flexShrink:0 }}
-                            title="Delete message">
-                            <Ic d={P.trash} size={12} color={t.red}/>
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })
+                  messages.map((msg, idx) => renderMessageWithAttachments(msg, idx))
                 )}
                 <div ref={messagesEndRef}/>
               </div>
 
+              {/* File Preview */}
+              {selectedFiles.length > 0 && (
+                <div className="attachment-preview" style={{ padding:'8px 14px', background:t.surface2, borderTop:`1px solid ${t.border}` }}>
+                  {selectedFiles.map((file, idx) => (
+                    <div key={idx} style={{ position:'relative', display:'inline-block' }}>
+                      {file.type.startsWith('image/') ? (
+                        <img src={URL.createObjectURL(file)} alt="preview" className="attachment-img" />
+                      ) : (
+                        <div className="attachment-doc">
+                          <Ic d={P.file} size={16} color={t.accent}/>
+                          <span style={{ fontSize: 11, color: t.text }}>{file.name.substring(0, 20)}</span>
+                        </div>
+                      )}
+                      <button
+                        className="remove-file-btn"
+                        onClick={() => removeFile(idx)}
+                        title="Remove file"
+                      >
+                        <Ic d={P.x} size={10} color="#fff" sw={2.5}/>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* input bar */}
               <div style={{ background:t.surface, borderTop:`1px solid ${t.border}`,
                 padding:'11px 14px', display:'flex', alignItems:'flex-end', gap:10, flexShrink:0 }}>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  multiple
+                  accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={handleFileSelect}
+                />
+
+                <button className="icon-btn" onClick={() => fileInputRef.current?.click()} title="Attach file">
+                  <Ic d={P.attach} size={16} color={t.textSub}/>
+                </button>
+
                 <textarea
                   ref={inputRef}
                   className="msg-input"
@@ -804,8 +1110,9 @@ const Message = () => {
                   style={{ height:'auto' }}
                 />
                 <button className="send-btn" onClick={sendMessage}
-                  disabled={!newMessage.trim() || sending} title="Send (Enter)">
-                  {sending
+                  disabled={(!newMessage.trim() && selectedFiles.length === 0) || sending || uploading}
+                  title="Send (Enter)">
+                  {(sending || uploading)
                     ? <div style={{ animation:'spin 0.7s linear infinite', display:'flex' }}>
                         <Ic d={P.spin} size={16} color="#fff"/>
                       </div>
@@ -815,7 +1122,6 @@ const Message = () => {
               </div>
             </div>
           ) : (
-            /* empty / no chat selected */
             <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center',
               background:t.bg }}>
               <div style={{ textAlign:'center', display:'flex', flexDirection:'column',
@@ -847,6 +1153,16 @@ const Message = () => {
           )}
         </div>
       </div>
+
+      {/* Image Modal */}
+      {previewImage && (
+        <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
+          <button className="modal-close" onClick={() => setPreviewImage(null)}>
+            <Ic d={P.x} size={18} color="#fff" sw={2}/>
+          </button>
+          <img src={previewImage} alt="Preview" className="modal-image" />
+        </div>
+      )}
     </>
   );
 };

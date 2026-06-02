@@ -3,14 +3,14 @@ const mongoose = require('mongoose');
 const postSchema = new mongoose.Schema({
   admin: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Admin',  // Changed from 'User' to 'Admin'
+    ref: 'Admin',  
     required: true
   },
-  adminName: {  // Denormalized for easier display
+  adminName: { 
     type: String,
     required: true
   },
-  adminRole: {  // Denormalized for easier filtering
+  adminRole: { 
     type: String,
     enum: ['admin', 'southadmin', 'centraladmin'],
     required: true

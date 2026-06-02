@@ -1,6 +1,116 @@
 import React, { useState, useEffect } from 'react';
 import API_URL from '../Utils/Api';
 
+// ==================== SCIENTIFIC CO2 EMISSION FACTORS (EPA 2025 ALIGNED) ====================
+const EPA_CO2_FACTORS = {
+  // kg CO₂e per kg of material
+  landfill: {
+    plastic: 0.07,
+    paper: 0.04,
+    glass: 0.02,
+    metal: 0.03,
+    aluminum: 0.03,
+    organic: 0.58,      // EPA 2025: 530 kg CO₂e/short ton
+    electronic: 0.12,
+    textile: 0.09,
+    cardboard: 0.05,
+    default: 0.10,
+  },
+  incineration: {
+    plastic: 2.40,      // EPA range: 2.2-2.6
+    paper: 0.18,
+    glass: 0.02,
+    metal: 0.02,
+    aluminum: 0.02,
+    organic: 0.30,
+    electronic: 0.45,
+    textile: 0.28,
+    cardboard: 0.15,
+    default: 0.25,
+  },
+  recycling: {
+    // Negative values = emissions saved (avoided virgin production)
+    plastic: -0.20,     // EPA 2025: net savings vs virgin
+    paper: -0.35,
+    glass: -0.12,
+    metal: -2.80,
+    aluminum: -9.00,    // Very high savings for aluminum
+    organic: -0.08,     // Composting savings
+    electronic: -0.65,
+    textile: -0.42,
+    cardboard: -0.28,
+    default: -0.15,
+  },
+  transportation: 0.000115, // kg CO₂e per kg per km (diesel truck, EPA average)
+};
+
+const VIRGIN_EMISSIONS = {
+  plastic: 2.50,
+  paper: 1.50,
+  glass: 0.80,
+  metal: 6.00,
+  aluminum: 12.00,
+  organic: 0.20,
+  electronic: 3.50,
+  textile: 2.00,
+  cardboard: 1.20,
+  default: 1.50,
+};
+
+const RECYCLED_EMISSIONS = {
+  plastic: 1.00,
+  paper: 0.60,
+  glass: 0.30,
+  metal: 1.50,
+  aluminum: 2.00,
+  organic: 0.10,
+  electronic: 1.00,
+  textile: 0.80,
+  cardboard: 0.50,
+  default: 0.60,
+};
+
+// Helper functions for weight and emissions calculation
+const calculateTotalWeight = (report) => {
+  const quantity = (report.detectedObjects && report.detectedObjects.length > 0)
+    ? report.detectedObjects.length
+    : 1;
+  const unitWeight = report.itemWeight || report.weight || 0.1;
+  return unitWeight * quantity;
+};
+
+const calculateRecyclingSavings = (wasteType, weight) => {
+  const virgin = VIRGIN_EMISSIONS[wasteType] || VIRGIN_EMISSIONS.default;
+  const recycled = RECYCLED_EMISSIONS[wasteType] || RECYCLED_EMISSIONS.default;
+  return (virgin - recycled) * weight;
+};
+
+const calculateCO2Emission = (wasteType, weight, disposalMethod = 'landfill', distance = 15) => {
+  const type = (wasteType || '').toLowerCase();
+  let baseEmission = 0;
+  
+  switch (disposalMethod) {
+    case 'recycled':
+      baseEmission = (EPA_CO2_FACTORS.recycling[type] || EPA_CO2_FACTORS.recycling.default) * weight;
+      break;
+    case 'incinerated':
+      baseEmission = (EPA_CO2_FACTORS.incineration[type] || EPA_CO2_FACTORS.incineration.default) * weight;
+      break;
+    default:
+      baseEmission = (EPA_CO2_FACTORS.landfill[type] || EPA_CO2_FACTORS.landfill.default) * weight;
+      break;
+  }
+  
+  // Transportation emissions (if not recycled locally)
+  let transportEmission = 0;
+  if (disposalMethod !== 'recycled') {
+    transportEmission = weight * distance * EPA_CO2_FACTORS.transportation;
+  }
+  
+  return baseEmission + transportEmission;
+};
+
+// ==================== STYLES ====================
 const C = {
   navyDark: '#1B2B4B',
   navyMid: '#2C4070',
@@ -36,16 +146,41 @@ const ICONS = {
   trash: "M4 7h16 M10 11v6 M14 11v6 M5 7l1 14a2 2 0 002 2h8a2 2 0 002-2l1-14 M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3",
   eye: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 9a3 3 0 100 6 3 3 0 000-6z",
   close: "M18 6L6 18 M6 6l12 12",
+  leaf: "M6.5 7.5C5 10 4 14 8 18c4 4 8.5 2.5 10.5 0.5C20 16 21 12 17 8c-3-3-7-3-9-2 M3 21l6-6",
+  factory: "M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z M12 7v6 M8 7v6 M16 7v6",
+  co2: "M4 12h16 M12 4v16",
+  trendingUp: "M23 6l-9.5 9.5-5-5L1 18 M17 6h6v6",
+  trendingDown: "M23 18l-9.5-9.5-5 5L1 6 M17 18h6v-6",
 };
 
-const statusBadgeStyle = (status) => ({
-  display: 'inline-flex', alignItems: 'center', gap: 4,
-  padding: '3px 9px', borderRadius: 5, fontSize: 11, fontWeight: 600,
-  background: status === 'completed' || status === 'recycled' ? '#E8F5E9' :
-              status === 'pending' ? '#FFF3E0' : '#FFEBEE',
-  color: status === 'completed' || status === 'recycled' ? C.success :
-         status === 'pending' ? C.warning : C.danger,
-});
+const statusBadgeStyle = (status, disposalMethod = null) => {
+  let bgColor, textColor;
+  
+  if (status === 'recycled') {
+    bgColor = '#E8F5E9';
+    textColor = C.success;
+  } else if (status === 'disposed') {
+    if (disposalMethod === 'incinerated') {
+      bgColor = '#FFF3E0';
+      textColor = C.warning;
+    } else {
+      bgColor = '#FFEBEE';
+      textColor = C.danger;
+    }
+  } else if (status === 'processed') {
+    bgColor = '#E3F2FD';
+    textColor = C.accent;
+  } else {
+    bgColor = '#FFF3E0';
+    textColor = C.warning;
+  }
+  
+  return {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '3px 9px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+    background: bgColor, color: textColor,
+  };
+};
 
 const styles = {
   container: { background: C.white, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(27,43,75,0.04)' },
@@ -104,13 +239,17 @@ const styles = {
   detailItem: {
     display: 'flex', alignItems: 'center', gap: 5,
   },
+  emissionsBadge: {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+  },
   modal: {
     position: 'fixed', inset: 0, background: 'rgba(15,30,56,0.65)',
     backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center',
     justifyContent: 'center', zIndex: 9999, padding: 16,
   },
   modalBox: {
-    background: C.white, borderRadius: 16, width: '100%', maxWidth: 560,
+    background: C.white, borderRadius: 16, width: '100%', maxWidth: 600,
     maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
     border: '1px solid rgba(27,43,75,0.1)', boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
   },
@@ -129,7 +268,7 @@ const styles = {
     display: 'flex', padding: '10px 0', borderBottom: '1px solid rgba(27,43,75,0.06)',
     fontSize: 13,
   },
-  infoLabel: { width: 120, fontWeight: 600, color: C.navyDark, flexShrink: 0 },
+  infoLabel: { width: 130, fontWeight: 600, color: C.navyDark, flexShrink: 0 },
   infoValue: { flex: 1, color: C.bodyGray },
   pagination: {
     display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
@@ -142,6 +281,17 @@ const styles = {
   },
   pageActive: { background: C.accent, color: C.white, borderColor: C.accent },
   emptyState: { padding: '60px 20px', textAlign: 'center', color: C.mutedGray },
+  summaryBar: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '12px 20px', background: '#F8FAFC',
+    borderBottom: '1px solid rgba(27,43,75,0.07)', fontSize: 12, color: C.bodyGray,
+    flexWrap: 'wrap', gap: 10,
+  },
+  summaryEmissionsItem: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    padding: '4px 12px', borderRadius: 20,
+    background: 'rgba(79,195,247,0.08)',
+  },
 };
 
 const History = ({ barangayFilter = null }) => {
@@ -153,6 +303,17 @@ const History = ({ barangayFilter = null }) => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [summary, setSummary] = useState({
+    totalItems: 0,
+    totalWeight: 0,
+    recycledItems: 0,
+    disposedItems: 0,
+    processedItems: 0,
+    pendingItems: 0,
+    totalCO2eSaved: 0,
+    totalCO2eGenerated: 0,
+    netCO2e: 0,
+  });
   const itemsPerPage = 10;
 
   const fetchHistoryData = async () => {
@@ -181,19 +342,45 @@ const History = ({ barangayFilter = null }) => {
       
       const reports = (data.reports || []).map(r => {
         const user = usersMap.get(r.user?._id || r.user);
-        // Fix: Use username instead of name/fullName
         const userName = user?.username || user?.name || user?.fullName || 'Unknown User';
+        const weight = calculateTotalWeight(r);
+        const wasteType = (r.classification || '').toLowerCase();
+        const disposalMethod = r.disposalMethod || (r.status === 'recycled' ? 'recycled' : 
+                              (r.status === 'incinerated' ? 'incinerated' : 'landfill'));
+        const distance = r.facilityDistance || 15;
+        
+        let co2eImpact = 0;
+        let co2eBreakdown = { disposal: 0, transport: 0, savings: 0 };
+        
+        if (r.status === 'recycled') {
+          const savings = calculateRecyclingSavings(wasteType, weight);
+          co2eImpact = savings;
+          co2eBreakdown.savings = savings;
+        } else if (r.status === 'disposed' || r.status === 'incinerated') {
+          const emissions = calculateCO2Emission(wasteType, weight, disposalMethod, distance);
+          co2eImpact = emissions;
+          co2eBreakdown.disposal = emissions - (weight * distance * EPA_CO2_FACTORS.transportation);
+          co2eBreakdown.transport = weight * distance * EPA_CO2_FACTORS.transportation;
+        } else if (r.status === 'processed') {
+          // Processing emissions (sorting, cleaning, etc.)
+          co2eImpact = (EPA_CO2_FACTORS.landfill[wasteType] || EPA_CO2_FACTORS.landfill.default) * weight * 0.1;
+          co2eBreakdown.disposal = co2eImpact;
+        }
+        
         return {
           ...r,
+          calculatedWeight: weight,
           userName: userName,
           userEmail: user?.email || 'Unknown',
           userBarangay: user?.barangay || 'Not specified',
           userUsername: user?.username || 'Unknown',
+          co2eImpact: co2eImpact,
+          co2eBreakdown: co2eBreakdown,
+          disposalMethod: disposalMethod,
         };
       }).sort((a, b) => new Date(b.scanDate || b.createdAt) - new Date(a.scanDate || a.createdAt));
       
       setHistoryData(reports);
-      setFilteredData(reports);
     } catch (error) {
       console.error('Error fetching history:', error);
     } finally {
@@ -242,10 +429,42 @@ const History = ({ barangayFilter = null }) => {
     
     setFilteredData(filtered);
     setCurrentPage(1);
+    
+    // Calculate summary with CO2e metrics
+    const totalItems = filtered.length;
+    const totalWeight = filtered.reduce((sum, r) => sum + (r.calculatedWeight || 0.1), 0);
+    const recycledItems = filtered.filter(r => r.status === 'recycled').length;
+    const disposedItems = filtered.filter(r => r.status === 'disposed').length;
+    const processedItems = filtered.filter(r => r.status === 'processed').length;
+    const pendingItems = filtered.filter(r => r.status === 'pending').length;
+    
+    const totalCO2eSaved = filtered
+      .filter(r => r.status === 'recycled')
+      .reduce((sum, r) => sum + (r.co2eImpact || 0), 0);
+    
+    const totalCO2eGenerated = filtered
+      .filter(r => r.status === 'disposed' || r.status === 'processed' || r.status === 'incinerated')
+      .reduce((sum, r) => sum + (r.co2eImpact || 0), 0);
+    
+    const netCO2e = totalCO2eGenerated + totalCO2eSaved;
+    
+    setSummary({
+      totalItems,
+      totalWeight: totalWeight.toFixed(1),
+      recycledItems,
+      disposedItems,
+      processedItems,
+      pendingItems,
+      totalCO2eSaved: Math.abs(totalCO2eSaved).toFixed(2),
+      totalCO2eGenerated: totalCO2eGenerated.toFixed(2),
+      netCO2e: netCO2e.toFixed(2),
+    });
   }, [statusFilter, searchTerm, dateRange, historyData]);
 
   const formatDate = (date, includeTime = false) => {
+    if (!date) return 'N/A';
     const d = new Date(date);
+    if (isNaN(d.getTime())) return 'Invalid Date';
     if (includeTime) {
       return d.toLocaleDateString('en-US', { 
         year: 'numeric', month: 'short', day: 'numeric',
@@ -257,13 +476,26 @@ const History = ({ barangayFilter = null }) => {
     });
   };
 
+  const formatCO2eImpact = (impact) => {
+    if (!impact && impact !== 0) return 'N/A';
+    const absValue = Math.abs(impact).toFixed(2);
+    if (impact < 0) {
+      return `-${absValue} kg CO₂e`;
+    } else if (impact > 0) {
+      return `+${absValue} kg CO₂e`;
+    }
+    return `0 kg CO₂e`;
+  };
+
   const exportToCSV = () => {
-    const headers = ['Date', 'Classification', 'Weight (kg)', 'Status', 'Location', 'Username', 'Email', 'Barangay'];
+    const headers = ['Date', 'Classification', 'Weight (kg)', 'Status', 'Disposal Method', 'CO₂e Impact (kg)', 'Location', 'Username', 'Email', 'Barangay'];
     const rows = filteredData.map(r => [
       formatDate(r.scanDate || r.createdAt, true),
       r.classification || 'Unknown',
-      (r.weight || 0.1).toFixed(2),
+      (r.calculatedWeight || 0.1).toFixed(2),
       r.status,
+      r.disposalMethod || (r.status === 'recycled' ? 'recycled' : 'landfill'),
+      r.co2eImpact?.toFixed(2) || '0',
       r.location?.address || 'Not specified',
       r.userUsername,
       r.userEmail,
@@ -275,7 +507,7 @@ const History = ({ barangayFilter = null }) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `history_export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `history_emissions_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -290,13 +522,14 @@ const History = ({ barangayFilter = null }) => {
   const HistoryDetailModal = () => {
     if (!selectedItem) return null;
     const item = selectedItem;
+    const isRecycled = item.status === 'recycled';
     
     return (
       <div style={styles.modal} onClick={() => setSelectedItem(null)}>
         <div style={styles.modalBox} onClick={e => e.stopPropagation()}>
           <div style={styles.modalHeader}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Icon d={ICONS.clock} size={18} color={C.accent} strokeWidth={2} />
+              <Icon d={isRecycled ? ICONS.leaf : ICONS.clock} size={18} color={isRecycled ? C.success : C.accent} strokeWidth={2} />
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.navyDark }}>
                 Collection Details
               </h3>
@@ -320,20 +553,69 @@ const History = ({ barangayFilter = null }) => {
             </div>
             <div style={styles.infoRow}>
               <div style={styles.infoLabel}>Weight:</div>
-              <div style={styles.infoValue}>{(item.weight || 0.1).toFixed(2)} kg</div>
+              <div style={styles.infoValue}>{(item.calculatedWeight || 0.1).toFixed(2)} kg</div>
             </div>
             <div style={styles.infoRow}>
               <div style={styles.infoLabel}>Status:</div>
               <div style={styles.infoValue}>
-                <span style={statusBadgeStyle(item.status)}>
+                <span style={statusBadgeStyle(item.status, item.disposalMethod)}>
+                  {item.status === 'recycled' && <Icon d={ICONS.leaf} size={10} color={C.success} strokeWidth={2.5} />}
                   {item.status?.charAt(0).toUpperCase() + item.status?.slice(1)}
+                  {item.status === 'disposed' && item.disposalMethod === 'incinerated' && ' (Incinerated)'}
                 </span>
               </div>
             </div>
+            
+            {/* CO₂e Impact Section */}
+            <div style={styles.infoRow}>
+              <div style={styles.infoLabel}>CO₂e Environmental Impact:</div>
+              <div style={styles.infoValue}>
+                <div style={{
+                  padding: '10px',
+                  borderRadius: 8,
+                  background: item.co2eImpact < 0 ? 'rgba(76,175,80,0.08)' : 'rgba(244,67,54,0.08)',
+                  border: `1px solid ${item.co2eImpact < 0 ? C.success : C.danger}30`,
+                }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8, color: item.co2eImpact < 0 ? C.success : C.danger }}>
+                    {formatCO2eImpact(item.co2eImpact)}
+                  </div>
+                  {isRecycled ? (
+                    <div style={{ fontSize: 12, color: C.bodyGray }}>
+                      <Icon d={ICONS.leaf} size={12} color={C.success} strokeWidth={2} style={{ marginRight: 4 }} />
+                      Emissions saved by recycling instead of producing virgin materials
+                      <div style={{ marginTop: 4, fontSize: 11, color: C.mutedGray }}>
+                        Based on EPA 2025 emission factors
+                      </div>
+                    </div>
+                  ) : item.status === 'disposed' ? (
+                    <div style={{ fontSize: 12, color: C.bodyGray }}>
+                      <div>• Disposal: {item.co2eBreakdown?.disposal?.toFixed(2) || '0'} kg CO₂e</div>
+                      <div>• Transportation: {item.co2eBreakdown?.transport?.toFixed(2) || '0'} kg CO₂e</div>
+                      <div style={{ marginTop: 4, fontSize: 11, color: C.mutedGray }}>
+                        Based on EPA 2025 emission factors
+                      </div>
+                    </div>
+                  ) : item.status === 'processed' ? (
+                    <div style={{ fontSize: 12, color: C.bodyGray }}>
+                      <div>• Processing emissions: {item.co2eBreakdown?.disposal?.toFixed(2) || '0'} kg CO₂e</div>
+                      <div style={{ marginTop: 4, fontSize: 11, color: C.mutedGray }}>
+                        Includes sorting, cleaning, and preparation
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: C.mutedGray }}>
+                      Pending - Emissions will be calculated when processed
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
             <div style={styles.infoRow}>
               <div style={styles.infoLabel}>Location:</div>
               <div style={styles.infoValue}>{item.location?.address || 'Not specified'}</div>
             </div>
+            
             <div style={styles.infoRow}>
               <div style={styles.infoLabel}>Username:</div>
               <div style={styles.infoValue}>
@@ -348,6 +630,7 @@ const History = ({ barangayFilter = null }) => {
               <div style={styles.infoLabel}>Barangay:</div>
               <div style={styles.infoValue}>{item.userBarangay}</div>
             </div>
+            
             {item.detectedObjects && item.detectedObjects.length > 0 && (
               <div style={styles.infoRow}>
                 <div style={styles.infoLabel}>Detected Items:</div>
@@ -364,6 +647,7 @@ const History = ({ barangayFilter = null }) => {
                 </div>
               </div>
             )}
+            
             {item.imageUrl && (
               <div style={styles.infoRow}>
                 <div style={styles.infoLabel}>Image:</div>
@@ -391,6 +675,38 @@ const History = ({ barangayFilter = null }) => {
   return (
     <>
       <div style={styles.container}>
+        {/* Summary Bar with CO2e Metrics */}
+        <div style={styles.summaryBar}>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <span>Total Records: <strong>{summary.totalItems}</strong></span>
+            <span>Total Weight: <strong>{summary.totalWeight} kg</strong></span>
+            <span>Recycled: <strong style={{ color: C.success }}>{summary.recycledItems}</strong></span>
+            <span>Disposed: <strong style={{ color: C.danger }}>{summary.disposedItems}</strong></span>
+            <span>Processed: <strong style={{ color: C.accent }}>{summary.processedItems}</strong></span>
+            <span>Pending: <strong style={{ color: C.warning }}>{summary.pendingItems}</strong></span>
+          </div>
+          
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div style={styles.summaryEmissionsItem}>
+              <Icon d={ICONS.leaf} size={14} color={C.success} strokeWidth={2} />
+              <span>CO₂e Saved: <strong style={{ color: C.success }}>{summary.totalCO2eSaved} kg</strong></span>
+            </div>
+            <div style={styles.summaryEmissionsItem}>
+              <Icon d={ICONS.factory} size={14} color={C.danger} strokeWidth={2} />
+              <span>CO₂e Generated: <strong style={{ color: C.danger }}>{summary.totalCO2eGenerated} kg</strong></span>
+            </div>
+            <div style={{
+              ...styles.summaryEmissionsItem,
+              background: parseFloat(summary.netCO2e) < 0 ? 'rgba(76,175,80,0.12)' : 'rgba(244,67,54,0.08)'
+            }}>
+              <Icon d={ICONS.co2} size={14} color={parseFloat(summary.netCO2e) < 0 ? C.success : C.danger} strokeWidth={2} />
+              <span>Net CO₂e: <strong style={{ color: parseFloat(summary.netCO2e) < 0 ? C.success : C.danger }}>
+                {parseFloat(summary.netCO2e) < 0 ? '-' : '+'}{Math.abs(parseFloat(summary.netCO2e)).toFixed(2)} kg
+              </strong></span>
+            </div>
+          </div>
+        </div>
+
         {/* Toolbar */}
         <div style={styles.toolbar}>
           <div style={styles.filterGroup}>
@@ -463,9 +779,19 @@ const History = ({ barangayFilter = null }) => {
                   <Icon d={ICONS.trash} size={14} color={C.bodyGray} strokeWidth={2} />
                   {item.classification || 'Unknown'} Waste
                 </div>
-                <span style={statusBadgeStyle(item.status)}>
-                  {item.status?.charAt(0).toUpperCase() + item.status?.slice(1)}
-                </span>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{
+                    ...styles.emissionsBadge,
+                    background: item.co2eImpact < 0 ? 'rgba(76,175,80,0.1)' : 'rgba(244,67,54,0.1)',
+                    color: item.co2eImpact < 0 ? C.success : C.danger,
+                  }}>
+                    <Icon d={item.co2eImpact < 0 ? ICONS.leaf : ICONS.factory} size={10} color={item.co2eImpact < 0 ? C.success : C.danger} strokeWidth={2} />
+                    {formatCO2eImpact(item.co2eImpact)}
+                  </span>
+                  <span style={statusBadgeStyle(item.status, item.disposalMethod)}>
+                    {item.status?.charAt(0).toUpperCase() + item.status?.slice(1)}
+                  </span>
+                </div>
               </div>
               
               <div style={styles.historyDetails}>
@@ -475,7 +801,7 @@ const History = ({ barangayFilter = null }) => {
                 </span>
                 <span style={styles.detailItem}>
                   <Icon d={ICONS.weight} size={11} color={C.mutedGray} strokeWidth={2} />
-                  {(item.weight || 0.1).toFixed(2)} kg
+                  {(item.calculatedWeight || 0.1).toFixed(2)} kg
                 </span>
                 <span style={styles.detailItem}>
                   <Icon d={ICONS.location} size={11} color={C.mutedGray} strokeWidth={2} />

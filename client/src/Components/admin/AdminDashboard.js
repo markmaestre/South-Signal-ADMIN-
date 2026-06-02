@@ -43,6 +43,120 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
+// ==================== SCIENTIFIC CO2 EMISSION FACTORS (IPCC/EPA BASED) ====================
+const SCIENTIFIC_CO2_FACTORS = {
+  landfill: {
+    plastic: 1.5, paper: 0.9, glass: 0.02, metal: 0.05,
+    aluminum: 0.05, organic: 1.2, electronic: 0.8, textile: 0.7, cardboard: 0.5,
+    default: 0.5,
+  },
+  recycling: {
+    plastic: -1.2, paper: -1.1, glass: -0.3, metal: -4.0,
+    aluminum: -8.0, organic: -0.2, electronic: -2.5, textile: -1.5, cardboard: -1.0,
+    default: -1.0,
+  },
+  incineration: {
+    plastic: 2.8, paper: 1.5, glass: 0.1, metal: 0.1,
+    aluminum: 0.1, organic: 0.5, electronic: 1.8, textile: 2.0, cardboard: 1.3,
+    default: 1.0,
+  },
+  processing: {
+    plastic: 0.3, paper: 0.2, glass: 0.1, metal: 0.2,
+    aluminum: 0.2, organic: 0.1, electronic: 0.4, textile: 0.3, cardboard: 0.2,
+    default: 0.2,
+  },
+  transportation: 0.0002,
+};
+
+const VIRGIN_EMISSIONS = {
+  plastic: 2.5, paper: 1.5, glass: 0.8, metal: 6.0,
+  aluminum: 12.0, electronic: 3.5, textile: 2.0, cardboard: 1.2, default: 1.5,
+};
+
+const RECYCLED_EMISSIONS = {
+  plastic: 1.0, paper: 0.6, glass: 0.3, metal: 1.5,
+  aluminum: 2.0, electronic: 1.0, textile: 0.8, cardboard: 0.5, default: 0.6,
+};
+
+// ==================== WEIGHT CALCULATION FUNCTIONS ====================
+const calculateItemWeight = (classification, detectedObjectLabel) => {
+  const weights = {
+    plastic: { default: 0.04, bottle: 0.05, bag: 0.01, container: 0.08, cup: 0.03, straw: 0.002 },
+    paper: { default: 0.08, bag: 0.05, cup: 0.01, newspaper: 0.10, magazine: 0.15 },
+    glass: { default: 0.25, bottle: 0.30, jar: 0.25, cup: 0.20 },
+    metal: { default: 0.02, can: 0.015, tin: 0.015, lid: 0.01 },
+    aluminum: { default: 0.015, can: 0.015, foil: 0.005 },
+    organic: { default: 0.25, food: 0.25, fruit: 0.10, vegetable: 0.20, yard: 0.50 },
+    electronic: { default: 0.50, phone: 0.18, laptop: 2.00, tablet: 0.50, battery: 0.15 },
+    textile: { default: 0.25, shirt: 0.20, pants: 0.40, jeans: 0.50, jacket: 0.60 },
+    cardboard: { default: 0.25, box: 0.50, sheet: 0.15, carton: 0.10 },
+  };
+  
+  const classKey = (classification || '').toLowerCase().trim();
+  const rawLabel = (detectedObjectLabel || '').toLowerCase().trim();
+  const category = weights[classKey] || { default: 0.10 };
+  
+  for (const [keyword, weight] of Object.entries(category)) {
+    if (rawLabel.includes(keyword)) return weight;
+  }
+  return category.default || 0.10;
+};
+
+const calculateTotalWeight = (report) => {
+  const quantity = (report.detectedObjects && report.detectedObjects.length > 0)
+    ? report.detectedObjects.length
+    : 1;
+  const classKey = (report.classification || '').toLowerCase().trim();
+  const rawLabel = (report.detectedObjects?.[0]?.label || '').toLowerCase().trim();
+  const unitWeight = calculateItemWeight(classKey, rawLabel);
+  return unitWeight * quantity;
+};
+
+const calculateMethaneEmissions = (organicWeight) => {
+  const methanePotential = 0.2;
+  const methaneDensity = 0.717;
+  const methaneGWP = 25;
+  const methaneMass = organicWeight * methanePotential * methaneDensity;
+  return methaneMass * methaneGWP;
+};
+
+const calculateRecyclingSavings = (wasteType, weight) => {
+  const virgin = VIRGIN_EMISSIONS[wasteType] || VIRGIN_EMISSIONS.default;
+  const recycled = RECYCLED_EMISSIONS[wasteType] || RECYCLED_EMISSIONS.default;
+  return (virgin - recycled) * weight;
+};
+
+const calculateCO2Emission = (report, weight) => {
+  const wasteType = (report.classification || '').toLowerCase();
+  const status = report.status || 'pending';
+  const distance = 10;
+  
+  let baseEmission = 0;
+  
+  switch (status) {
+    case 'recycled':
+      baseEmission = (SCIENTIFIC_CO2_FACTORS.recycling[wasteType] || SCIENTIFIC_CO2_FACTORS.recycling.default) * weight;
+      break;
+    case 'processed':
+      baseEmission = (SCIENTIFIC_CO2_FACTORS.processing[wasteType] || SCIENTIFIC_CO2_FACTORS.processing.default) * weight;
+      break;
+    case 'incinerated':
+      baseEmission = (SCIENTIFIC_CO2_FACTORS.incineration[wasteType] || SCIENTIFIC_CO2_FACTORS.incineration.default) * weight;
+      break;
+    default:
+      baseEmission = (SCIENTIFIC_CO2_FACTORS.landfill[wasteType] || SCIENTIFIC_CO2_FACTORS.landfill.default) * weight;
+      break;
+  }
+  
+  let transportEmission = 0;
+  if (status !== 'recycled' && status !== 'processed') {
+    transportEmission = weight * distance * SCIENTIFIC_CO2_FACTORS.transportation;
+  }
+  
+  return baseEmission + transportEmission;
+};
+
+// ==================== THEME CONSTANTS ====================
 const C = {
   navyDark:  '#1B2B4B',
   navyMid:   '#2C4070',
@@ -107,6 +221,7 @@ const getAdminBadgeStyle = (role) => {
   return map[role] || map.admin;
 };
 
+// ==================== STYLES ====================
 const S = {
   root: {
     display: 'flex', minHeight: '100vh',
@@ -218,39 +333,65 @@ const S = {
     gap: 14, marginBottom: 24,
   },
   statCard: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12, padding: '18px 18px 14px',
-    position: 'relative', overflow: 'hidden',
-    transition: 'box-shadow 0.2s, transform 0.18s', cursor: 'pointer',
+    background: C.white,
+    border: '1px solid rgba(27,43,75,0.07)',
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    transition: 'box-shadow 0.2s, transform 0.18s',
+    cursor: 'pointer',
     boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
+    display: 'flex',
+    flexDirection: 'column',
   },
   statCardAccent: (color) => ({
-    position: 'absolute', top: 0, left: 0,
-    width: '100%', height: 2.5, background: color,
-    borderRadius: '12px 12px 0 0',
+    height: 3,
+    width: '100%',
+    background: color,
+    flexShrink: 0,
   }),
+  statCardBody: {
+    padding: '14px 16px 0',
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 1,
+  },
+  statCardTop: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   statIconBox: (color) => ({
-    width: 38, height: 38, borderRadius: 9,
-    background: color + '14', border: '1px solid ' + color + '28',
+    width: 36, height: 36, borderRadius: 9,
+    background: color + '18',
+    border: '1px solid ' + color + '30',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    marginBottom: 12,
+    flexShrink: 0,
+  }),
+  statTrendBadge: (positive) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 3,
+    fontSize: 10.5, fontWeight: 700,
+    color: positive ? C.success : C.danger,
+    background: positive ? 'rgba(76,175,80,0.12)' : 'rgba(244,67,54,0.12)',
+    padding: '3px 8px', borderRadius: 20,
   }),
   statLabel: {
-    fontSize: 10.5, color: C.bodyGray, fontWeight: 600,
-    marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em',
+    fontSize: 10, color: C.bodyGray, fontWeight: 600,
+    marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.07em',
   },
   statValue: {
-    fontSize: 26, fontWeight: 800, color: C.navyDark,
-    lineHeight: 1, marginBottom: 10, letterSpacing: '-0.02em',
+    fontSize: 24, fontWeight: 800, color: C.navyDark,
+    lineHeight: 1, letterSpacing: '-0.02em',
   },
-  statBadge: (positive) => ({
-    display: 'inline-flex', alignItems: 'center', gap: 4,
-    fontSize: 11, fontWeight: 600,
-    color: positive ? C.success : C.danger,
-    background: positive ? '#E8F5E9' : '#FFEBEE',
-    border: `1px solid ${positive ? '#C8E6C9' : '#FFCDD2'}`,
-    borderRadius: 5, padding: '3px 8px',
-  }),
+  statSub: {
+    fontSize: 10.5, color: C.mutedGray, marginTop: 4, marginBottom: 0,
+  },
+  sparklineWrap: {
+    height: 56,
+    marginTop: 10,
+    overflow: 'hidden',
+  },
   dashboardColumns: {
     display: 'grid',
     gridTemplateColumns: '1fr 360px',
@@ -482,8 +623,6 @@ const S = {
     marginLeft: 'auto', background: 'none', border: 'none',
     color: C.danger, cursor: 'pointer', fontSize: 18, lineHeight: 1,
   },
-
-  /* ── Analytics styles ── */
   analyticsCard: {
     background: C.white, border: '1px solid rgba(27,43,75,0.07)',
     borderRadius: 12, padding: '20px',
@@ -497,8 +636,6 @@ const S = {
   titleDot: (color) => ({
     width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0,
   }),
-
-  /* ── User Analytics ── */
   userAnalyticsCard: {
     background: C.white, border: '1px solid rgba(27,43,75,0.07)',
     borderRadius: 12, padding: '20px',
@@ -509,18 +646,6 @@ const S = {
     display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
     gap: 0, marginBottom: 20,
   },
-  userStatBlock: {
-    padding: '0 20px 0 0',
-    borderRight: '1px solid rgba(27,43,75,0.07)',
-    marginRight: 20,
-  },
-  userStatBlockLast: { padding: '0 0 0 0' },
-  userStatPair: {
-    display: 'flex', gap: 16, marginBottom: 10,
-  },
-  userStatItem: { flex: 1 },
-  userStatNum: { fontSize: 22, fontWeight: 800, lineHeight: 1, marginBottom: 3 },
-  userStatLbl: { fontSize: 10.5, color: C.bodyGray, fontWeight: 500 },
   userStatSectionLabel: {
     fontSize: 10, fontWeight: 700, letterSpacing: '0.09em',
     textTransform: 'uppercase', color: C.mutedGray, marginBottom: 10,
@@ -534,8 +659,6 @@ const S = {
     background: color, borderRadius: 3,
     transition: 'width 0.6s ease',
   }),
-
-  /* ── FIXED: Waste Analytics 2-col layout ── */
   wasteAnalyticsGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
@@ -547,124 +670,112 @@ const S = {
     boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
     marginBottom: 16,
   },
-  wasteCol: {
-    padding: '20px',
-  },
-  colHeader: {
-    display: 'flex', alignItems: 'center', gap: 7,
-    marginBottom: 16,
-  },
+  wasteCol: { padding: '20px' },
+  colHeader: { display: 'flex', alignItems: 'center', gap: 7, marginBottom: 16 },
   colHeaderDot: (color) => ({
     width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0,
   }),
-  colTitle: {
-    fontSize: 12.5, fontWeight: 700, color: C.navyDark, margin: 0,
-    letterSpacing: '0.01em',
-  },
-
-  /* Scanned items list */
+  colTitle: { fontSize: 12.5, fontWeight: 700, color: C.navyDark, margin: 0, letterSpacing: '0.01em' },
   scannedItem: {
     display: 'flex', alignItems: 'center',
-    padding: '8px 0',
-    borderBottom: '1px solid rgba(27,43,75,0.05)',
+    padding: '8px 0', borderBottom: '1px solid rgba(27,43,75,0.05)',
   },
-  scannedRank: {
-    width: 28, fontSize: 11, fontWeight: 700,
-    color: C.mutedGray, flexShrink: 0,
-  },
-  scannedLabel: {
-    flex: 1, fontSize: 12.5, fontWeight: 500, color: C.navyDark,
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-  },
+  scannedRank: { width: 28, fontSize: 11, fontWeight: 700, color: C.mutedGray, flexShrink: 0 },
+  scannedLabel: { flex: 1, fontSize: 12.5, fontWeight: 500, color: C.navyDark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   scannedBadge: (color) => ({
-    fontSize: 11, fontWeight: 700,
-    color: C.white, background: color,
+    fontSize: 11, fontWeight: 700, color: C.white, background: color,
     padding: '2px 10px', borderRadius: 20, flexShrink: 0, marginLeft: 8,
   }),
-
-  /* Weight block — horizontal layout */
-  weightBlock: {
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 24,
-    padding: '20px',
-    background: `linear-gradient(160deg, ${C.deepDark} 0%, ${C.navyMid} 100%)`,
+  totalCollectedFull: {
+    background: `linear-gradient(135deg, ${C.deepDark} 0%, ${C.navyMid} 100%)`,
+    padding: '24px 32px',
+    marginTop: 0,
+    borderRadius: 0,
   },
-  weightCircle: {
-    width: 90, height: 90, borderRadius: '50%',
+  totalCollectedContent: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 24,
+  },
+  totalCollectedLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 32,
+    flexWrap: 'wrap',
+  },
+  weightCircleLarge: {
+    width: 100,
+    height: 100,
+    borderRadius: '50%',
     border: `3px solid ${C.accent}`,
-    display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
     background: 'rgba(79,195,247,0.07)',
     flexShrink: 0,
   },
-  weightNum: {
-    fontSize: 22, fontWeight: 900, color: C.accent,
-    lineHeight: 1, letterSpacing: '-0.02em',
+  weightNumLarge: { fontSize: 26, fontWeight: 900, color: C.accent, lineHeight: 1, letterSpacing: '-0.02em' },
+  weightUnitLarge: { fontSize: 12, fontWeight: 600, color: C.accent, opacity: 0.7, marginTop: 2 },
+  statusBarsContainer: {
+    flex: 1,
+    minWidth: 260,
   },
-  weightUnit: { fontSize: 11, fontWeight: 600, color: C.accent, opacity: 0.7, marginTop: 2 },
-
-  /* Location breakdown */
+  statusBarItem: { width: '100%', marginBottom: 14 },
+  statusBarLabel: { display: 'flex', justifyContent: 'space-between', marginBottom: 5 },
+  statusBarLabelText: { fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.04em' },
+  statusBarValue: { fontSize: 11, fontWeight: 700, color: C.white },
+  statusBarTrack: { height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' },
+  statusBarFill: (color, percent) => ({
+    height: '100%',
+    width: `${percent}%`,
+    background: color,
+    borderRadius: 3,
+    transition: 'width 0.6s ease',
+  }),
+  totalCollectedRight: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  totalReportsText: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
+  totalReportsValue: { fontSize: 28, fontWeight: 800, color: C.white, lineHeight: 1 },
   locationCard: {
-    background: C.white,
-    border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12,
-    padding: '20px',
-    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
+    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
+    borderRadius: 12, padding: '20px', boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
   },
   locationHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    flexWrap: 'wrap',
-    gap: 12,
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 16, flexWrap: 'wrap', gap: 12,
   },
   locationTableHeader: {
-    display: 'grid',
-    gridTemplateColumns: '40px 1fr 80px 100px',
-    padding: '10px 12px',
-    background: C.pageBg,
-    borderRadius: 8,
-    fontSize: 10.5,
-    fontWeight: 700,
-    color: C.mutedGray,
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    marginBottom: 8,
+    display: 'grid', gridTemplateColumns: '40px 1fr 80px 100px',
+    padding: '10px 12px', background: C.pageBg, borderRadius: 8,
+    fontSize: 10.5, fontWeight: 700, color: C.mutedGray,
+    textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8,
   },
   locationRow: {
-    display: 'grid',
-    gridTemplateColumns: '40px 1fr 80px 100px',
-    padding: '12px',
-    borderBottom: '1px solid rgba(27,43,75,0.05)',
-    alignItems: 'center',
-    transition: 'background 0.15s ease',
-    cursor: 'pointer',
-    borderRadius: 8,
+    display: 'grid', gridTemplateColumns: '40px 1fr 80px 100px',
+    padding: '12px', borderBottom: '1px solid rgba(27,43,75,0.05)',
+    alignItems: 'center', transition: 'background 0.15s ease', cursor: 'pointer', borderRadius: 8,
   },
-  locationRank: {
-    fontSize: 13, fontWeight: 700, color: C.mutedGray,
-  },
-  locationName: {
-    fontSize: 13, fontWeight: 600, color: C.navyDark,
-  },
-  locationReports: {
-    fontSize: 13, fontWeight: 700, color: C.danger,
-  },
+  locationRank: { fontSize: 13, fontWeight: 700, color: C.mutedGray },
+  locationName: { fontSize: 13, fontWeight: 600, color: C.navyDark },
+  locationReports: { fontSize: 13, fontWeight: 700, color: C.danger },
   locationDetections: {
     fontSize: 12, fontWeight: 600, color: C.accent,
-    background: `${C.accent}14`,
-    padding: '4px 8px', borderRadius: 20,
+    background: `${C.accent}14`, padding: '4px 8px', borderRadius: 20,
     textAlign: 'center', display: 'inline-block', width: 'fit-content',
   },
   locationMostActive: {
-    fontSize: 11, color: C.bodyGray,
-    background: C.pageBg, padding: '6px 12px', borderRadius: 20,
+    fontSize: 11, color: C.bodyGray, background: C.pageBg, padding: '6px 12px', borderRadius: 20,
   },
 };
 
+// ==================== ICON COMPONENT ====================
 const Icon = ({ d, size = 18, color = 'currentColor', strokeWidth = 1.8 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
     stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
@@ -706,6 +817,8 @@ const ICONS = {
   building:    ["M3 21h18", "M5 21V7l8-4 8 4v14", "M9 21v-6h6v6"],
   shield:      "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
   trending:    ["M23 6l-9.5 9.5-5-5L1 18", "M17 6h6v6"],
+  trendingUp:  ["M23 6l-9.5 9.5-5-5L1 18", "M17 6h6v6"],
+  trendingDown:["M23 18l-9.5-9.5-5 5L1 6", "M17 18h6v-6"],
   check:       ["M20 6L9 17l-5-5"],
   layers:      ["M12 2L2 7l10 5 10-5-10-5z", "M2 17l10 5 10-5", "M2 12l10 5 10-5"],
   barChart:    ["M18 20V10", "M12 20V4", "M6 20v-6"],
@@ -746,7 +859,64 @@ const SectionHeading = ({ children }) => (
   </div>
 );
 
-/* ─── HEATMAP ── */
+// ==================== SPARKLINE COMPONENT ====================
+const Sparkline = ({ data = [], color = '#4FC3F7' }) => {
+  const canvasRef = useRef(null);
+  const chartRef  = useRef(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || !data.length) return;
+    if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+    const ctx = canvasRef.current.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 56);
+    grad.addColorStop(0, color + '45');
+    grad.addColorStop(1, color + '00');
+    chartRef.current = new ChartJS(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map((_, i) => i),
+        datasets: [{
+          data, borderColor: color, backgroundColor: grad,
+          fill: true, tension: 0.42, borderWidth: 2,
+          pointRadius: 0, pointHoverRadius: 0,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: { x: { display: false }, y: { display: false } },
+        layout: { padding: { top: 2, bottom: 2, left: 0, right: 0 } },
+      },
+    });
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+  }, [data, color]);
+
+  return <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '56px' }} />;
+};
+
+// ==================== STAT CARD COMPONENT ====================
+const StatCard = ({ label, value, sub, color, iconPath, trendUp, trendPct, sparkData, onClick }) => (
+  <div style={S.statCard} onClick={onClick}
+    onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 28px rgba(27,43,75,0.13)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+    onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 4px rgba(27,43,75,0.04)'; e.currentTarget.style.transform = 'none'; }}>
+    <div style={S.statCardAccent(color)} />
+    <div style={S.statCardBody}>
+      <div style={S.statCardTop}>
+        <div style={S.statIconBox(color)}><Icon d={iconPath} size={17} color={color} strokeWidth={2} /></div>
+        <div style={S.statTrendBadge(trendUp)}>
+          <Icon d={trendUp ? ICONS.trendingUp : ICONS.trendingDown} size={11} color={trendUp ? C.success : C.danger} strokeWidth={2.5} />
+          {trendPct}
+        </div>
+      </div>
+      <div style={S.statLabel}>{label}</div>
+      <div style={{ ...S.statValue, color }}>{value}</div>
+      <div style={S.statSub}>{sub}</div>
+    </div>
+    <div style={S.sparklineWrap}><Sparkline data={sparkData} color={color} /></div>
+  </div>
+);
+
+// ==================== WASTE HEATMAP COMPONENT ====================
 const WasteHeatmap = ({ locations, topLocations, onLocationClick, adminRole }) => {
   const mapRef = useRef(null);
   const heatmapRef = useRef(null);
@@ -809,7 +979,7 @@ const WasteHeatmap = ({ locations, topLocations, onLocationClick, adminRole }) =
   return <div id="waste-map" style={{ height: '500px', width: '100%', borderRadius: '12px' }} />;
 };
 
-/* ─── MAIN ── */
+// ==================== MAIN ADMIN DASHBOARD COMPONENT ====================
 const AdminDashboard = () => {
   const [admin, setAdmin] = useState(null);
   const [adminRole, setAdminRole] = useState(null);
@@ -836,6 +1006,10 @@ const AdminDashboard = () => {
     maleUsers: 0, femaleUsers: 0, usersThisMonth: 0, usersThisWeek: 0,
   });
   const [locationDetections, setLocationDetections] = useState([]);
+  const [sparkReports, setSparkReports] = useState(Array(14).fill(0));
+  const [sparkWeight, setSparkWeight] = useState(Array(14).fill(0));
+  const [sparkUsers, setSparkUsers] = useState(Array(14).fill(0));
+  const [sparkLocations, setSparkLocations] = useState(Array(14).fill(0));
 
   const navigate = useNavigate();
 
@@ -846,14 +1020,12 @@ const AdminDashboard = () => {
   };
 
   const geocodeAddress = async (address) => {
-    let str = typeof address === 'string' ? address
-      : address ? (address.address || address.location || address.name || '') : '';
+    let str = typeof address === 'string' ? address : (address ? (address.address || address.location || address.name || '') : '');
     if (!str) return getDefaultCoords();
     const southMap = {
       'phase 1': { lat: 14.5012, lng: 121.0505 }, 'phase 2': { lat: 14.5028, lng: 121.0521 },
       'phase 3': { lat: 14.5045, lng: 121.0542 }, 'phase 4': { lat: 14.5061, lng: 121.0558 },
       'phase 5': { lat: 14.5078, lng: 121.0575 }, 'barangay hall': { lat: 14.50493, lng: 121.05368 },
-      'market': { lat: 14.5040, lng: 121.0528 }, 'church': { lat: 14.5055, lng: 121.0548 },
     };
     const centralMap = {
       'phase 1': { lat: 14.5155, lng: 121.0555 }, 'phase 2': { lat: 14.5172, lng: 121.0572 },
@@ -959,18 +1131,24 @@ const AdminDashboard = () => {
       if (role === 'southadmin')   wasteReports = wasteReports.filter(r => r.assignedBarangay === 'south_signal');
       if (role === 'centraladmin') wasteReports = wasteReports.filter(r => r.assignedBarangay === 'central_signal');
 
-      const totalReports     = wasteReports.length;
+      // Calculate weight using scientific method
+      let totalWeight = 0;
+      wasteReports.forEach(r => { totalWeight += calculateTotalWeight(r); });
+
+      const totalReports = wasteReports.length;
       const pendingReports   = wasteReports.filter(r => r.status === 'pending').length;
       const recycledReports  = wasteReports.filter(r => r.status === 'recycled').length;
       const processedReports = wasteReports.filter(r => r.status === 'processed').length;
       const disposedReports  = wasteReports.filter(r => r.status === 'disposed').length;
-      let totalWeight = 0;
-      wasteReports.forEach(r => { totalWeight += r.weight || 0.1; });
 
       const lastWeek = wasteReports.filter(r => ((now - new Date(r.scanDate || r.createdAt)) / 86400000) <= 7).length;
       const prevWeek = wasteReports.filter(r => { const d = (now - new Date(r.scanDate || r.createdAt)) / 86400000; return d > 7 && d <= 14; }).length;
       const weeklyGrowth = prevWeek > 0 ? ((lastWeek - prevWeek) / prevWeek) * 100 : lastWeek > 0 ? 100 : 0;
-      setDashboardStats({ totalReports, pendingReports, recycledReports, processedReports, disposedReports, totalMessages: 0, unreadMessages: 0, weeklyGrowth, totalWeight });
+      setDashboardStats({ 
+        totalReports, pendingReports, recycledReports, processedReports, disposedReports, 
+        totalMessages: 0, unreadMessages: 0, weeklyGrowth, 
+        totalWeight: totalWeight.toFixed(2) 
+      });
 
       const classification = {};
       wasteReports.forEach(r => { const t = r.classification || 'Unknown'; classification[t] = (classification[t] || 0) + 1; });
@@ -987,11 +1165,36 @@ const AdminDashboard = () => {
       });
       setDetectedObjectsData(objectsCount);
 
+      const dailyBuckets = {};
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const dk = d.toISOString().split('T')[0];
+        dailyBuckets[dk] = { count: 0, weight: 0 };
+      }
+      wasteReports.forEach(r => {
+        const dk = new Date(r.scanDate || r.createdAt).toISOString().split('T')[0];
+        if (dailyBuckets[dk]) {
+          dailyBuckets[dk].count++;
+          dailyBuckets[dk].weight += calculateTotalWeight(r);
+        }
+      });
+      const bucketKeys = Object.keys(dailyBuckets).sort();
+      setSparkReports(bucketKeys.map(k => dailyBuckets[k].count));
+      setSparkWeight(bucketKeys.map(k => Math.round(dailyBuckets[k].weight * 10) / 10));
+
+      const userDailyBuckets = {};
+      bucketKeys.forEach(k => { userDailyBuckets[k] = 0; });
+      filteredUsers.forEach(u => {
+        const dk = new Date(u.createdAt).toISOString().split('T')[0];
+        if (userDailyBuckets[dk] !== undefined) userDailyBuckets[dk]++;
+      });
+      setSparkUsers(bucketKeys.map(k => userDailyBuckets[k]));
+
       const dailyCollection = {};
       wasteReports.forEach(r => {
         const dk = new Date(r.scanDate || r.createdAt).toISOString().split('T')[0];
         if (!dailyCollection[dk]) dailyCollection[dk] = { date: dk, count: 0, weight: 0 };
-        dailyCollection[dk].count++; dailyCollection[dk].weight += r.weight || 0.1;
+        dailyCollection[dk].count++; dailyCollection[dk].weight += calculateTotalWeight(r);
       });
       setCollectionData(Object.values(dailyCollection).sort((a, b) => a.date.localeCompare(b.date)).slice(-30));
 
@@ -1009,7 +1212,7 @@ const AdminDashboard = () => {
         return {
           id: r._id, type: r.classification || 'Unknown', status: r.status || 'pending',
           date: new Date(r.scanDate || r.createdAt).toLocaleDateString(),
-          weight: (r.weight || 0.1).toFixed(2),
+          weight: calculateTotalWeight(r).toFixed(2),
           location: getAddressString(r.location) || getAddressString(user?.address) || 'Not specified',
         };
       }));
@@ -1026,17 +1229,15 @@ const AdminDashboard = () => {
             if (report.detectedObjects && Array.isArray(report.detectedObjects)) {
               detectionCount = report.detectedObjects.length;
             }
+            const weight = calculateTotalWeight(report);
             if (locationMap.has(key)) {
               const ex = locationMap.get(key);
-              ex.count++;
-              ex.totalWeight += report.weight || 0.1;
-              ex.intensity = ex.totalWeight;
-              ex.detectionCount += detectionCount;
+              ex.count++; ex.totalWeight += weight;
+              ex.intensity = ex.totalWeight; ex.detectionCount += detectionCount;
             } else {
               locationMap.set(key, {
                 id: key, address, lat: coords.lat, lng: coords.lng,
-                count: 1, totalWeight: report.weight || 0.1,
-                intensity: report.weight || 0.1, detectionCount,
+                count: 1, totalWeight: weight, intensity: weight, detectionCount,
               });
             }
           } catch {}
@@ -1046,6 +1247,18 @@ const AdminDashboard = () => {
       const sorted = [...locations].sort((a, b) => b.count - a.count);
       setTopLocations(sorted);
       setMapLocations(locations);
+
+      const locDailyBuckets = {};
+      bucketKeys.forEach(k => { locDailyBuckets[k] = new Set(); });
+      wasteReports.forEach(r => {
+        const user = usersMap.get(r.user?._id || r.user);
+        const addr = getAddressString(r.location) || getAddressString(user?.address);
+        if (addr) {
+          const dk = new Date(r.scanDate || r.createdAt).toISOString().split('T')[0];
+          if (locDailyBuckets[dk]) locDailyBuckets[dk].add(addr.toLowerCase().trim());
+        }
+      });
+      setSparkLocations(bucketKeys.map(k => locDailyBuckets[k].size));
 
       const locationData = sorted.slice(0, 10).map((loc, idx) => ({
         rank: idx + 1, name: loc.address,
@@ -1097,7 +1310,7 @@ const AdminDashboard = () => {
     if (d.admin) { setAdmin(d.admin); setAdminRole(d.admin.role); localStorage.setItem('adminData', JSON.stringify(d.admin)); }
   };
 
-  /* ─── Chart base options ── */
+  // Chart options
   const baseTooltip = {
     backgroundColor: C.deepDark,
     titleFont: { size: 11, family: "'Inter','DM Sans',sans-serif" },
@@ -1155,7 +1368,7 @@ const AdminDashboard = () => {
     },
   };
 
-  /* ─── Chart Data ── */
+  // Chart Data
   const classificationChartData = {
     labels: Object.keys(classificationData),
     datasets: [{
@@ -1185,25 +1398,17 @@ const AdminDashboard = () => {
     }],
   };
 
-  const locationChartData = {
-    labels: locationAnalytics.top5Locations?.map(l => l.address?.substring(0, 14) + (l.address?.length > 14 ? '…' : '') || 'Unknown') || [],
-    datasets: [{ label: 'Reports', data: locationAnalytics.top5Locations?.map(l => l.count) || [], backgroundColor: C.danger + 'CC', borderColor: '#C62828', borderWidth: 1, borderRadius: 6 }],
-  };
-
-  const getMostScannedItems = () =>
-    Object.entries(detectedObjectsData).sort((a, b) => b[1] - a[1]).slice(0, 7);
-
+  const getMostScannedItems = () => Object.entries(detectedObjectsData).sort((a, b) => b[1] - a[1]).slice(0, 7);
   const mostScannedItems = getMostScannedItems();
-  const totalDetections  = Object.values(detectedObjectsData).reduce((a, b) => a + b, 0);
+  const totalDetections = Object.values(detectedObjectsData).reduce((a, b) => a + b, 0);
 
-  const mostScannedLineData = {
+  const mostScannedBarData = {
     labels: mostScannedItems.map(([label]) => label.length > 12 ? label.slice(0, 12) + '…' : label),
     datasets: [{
-      label: 'Scans', data: mostScannedItems.map(([, count]) => count),
-      borderColor: C.navyMid, backgroundColor: 'rgba(44,64,112,0.08)',
-      fill: true, tension: 0.35,
-      pointBackgroundColor: CHART_COLORS, pointBorderColor: C.white,
-      pointBorderWidth: 2, pointRadius: 5, pointHoverRadius: 7,
+      label: 'Scan Count',
+      data: mostScannedItems.map(([, count]) => count),
+      backgroundColor: CHART_COLORS.slice(0, mostScannedItems.length),
+      borderColor: C.white, borderWidth: 1, borderRadius: 6, barPercentage: 0.65,
     }],
   };
 
@@ -1218,55 +1423,47 @@ const AdminDashboard = () => {
     }],
   };
 
-  /* ─── Stat Cards ── */
-  const statCards = [
-    { label: 'Total Reports', value: dashboardStats.totalReports, icon: ICONS.waste, color: C.accent, footer: `+${Math.round(dashboardStats.weeklyGrowth)}% this week`, navTo: 'collection' },
-    { label: 'Total Weight',  value: `${dashboardStats.totalWeight.toFixed(1)} kg`, icon: ICONS.weight, color: C.navyMid, footer: `${dashboardStats.totalReports} items`, navTo: 'collection' },
-    { label: 'Total Users',   value: userAnalytics.totalUsers, icon: ICONS.users, color: C.success, footer: `${userAnalytics.usersThisMonth} new this month`, navTo: 'users' },
-    { label: 'Active Locations', value: locationAnalytics.totalUniqueLocations || 0, icon: ICONS.location, color: C.danger, footer: `${locationAnalytics.top5Locations?.length || 0} top areas`, navTo: 'map' },
-  ];
-
-  /* ─── Nav ── */
+  // Navigation
   const navItems = [
-    { id: 'dashboard',  label: 'Dashboard',    icon: ICONS.dashboard,  section: 'Overview'   },
-    { id: 'analytics',  label: 'Analytics',    icon: ICONS.analytics,  section: 'Insights'   },
-    { id: 'collection', label: 'Collection',   icon: ICONS.collection, section: 'Operations' },
-    { id: 'map',        label: 'Heat Map',     icon: ICONS.map,        section: 'Operations' },
-    { id: 'users',      label: 'Users',        icon: ICONS.users,      section: 'Management' },
-    { id: 'history',    label: 'History',      icon: ICONS.history,    section: 'Records'    },
-    { id: 'waste',      label: 'Waste Reports',icon: ICONS.waste,      section: 'Management' },
-    { id: 'messages',   label: 'Messages',     icon: ICONS.messages,   section: 'Management' },
-    { id: 'posts',      label: 'Posts',        icon: ICONS.leaf,       section: 'Management' },
-    { id: 'profile',   label: 'Admin Profile', icon: ICONS.profile,    section: 'Account'    },
+    { id: 'dashboard',  label: 'Dashboard',     icon: ICONS.dashboard,  section: 'Overview'   },
+    { id: 'analytics',  label: 'Analytics',     icon: ICONS.analytics,  section: 'Insights'   },
+    { id: 'collection', label: 'Collection',    icon: ICONS.collection, section: 'Operations' },
+    { id: 'map',        label: 'Heat Map',      icon: ICONS.map,        section: 'Operations' },
+    { id: 'users',      label: 'Users',         icon: ICONS.users,      section: 'Management' },
+    { id: 'history',    label: 'History',       icon: ICONS.history,    section: 'Records'    },
+    { id: 'waste',      label: 'Waste Reports', icon: ICONS.waste,      section: 'Management' },
+    { id: 'messages',   label: 'Messages',      icon: ICONS.messages,   section: 'Management' },
+    { id: 'posts',      label: 'Posts',         icon: ICONS.leaf,       section: 'Management' },
+    { id: 'profile',    label: 'Admin Profile', icon: ICONS.profile,    section: 'Account'    },
   ];
   const navSections = ['Overview', 'Insights', 'Operations', 'Records', 'Management', 'Account'];
 
   const pageTitles = {
-    dashboard:  { title: 'Overview Dashboard',     sub: `Welcome back, ${admin?.email?.split('@')[0] || 'Admin'}` },
-    analytics:  { title: 'Waste & User Analytics', sub: 'Detailed breakdown of collection trends and user insights' },
-    collection: { title: 'Collection Records',     sub: 'Daily waste collection log and tracking' },
-    map:        { title: 'Waste Heat Map',         sub: 'Geographic visualization of collection activity' },
-    users:      { title: 'User Management',        sub: 'Manage residents and monitor account status' },
-    history:    { title: 'Collection History',     sub: 'Complete log of waste collection events' },
-    waste:      { title: 'Waste Reports',          sub: 'Manage and classify waste detection reports' },
-    messages:   { title: 'Messages',               sub: 'Resident communications and inquiries' },
-    posts:      { title: 'Posts Management',       sub: 'Manage community posts and announcements' },
-    profile:    { title: 'Admin Profile',          sub: 'Manage your account and credentials' },
+    dashboard:  { title: 'Overview Dashboard',      sub: `Welcome back, ${admin?.email?.split('@')[0] || 'Admin'}` },
+    analytics:  { title: 'Waste & User Analytics',  sub: 'Detailed breakdown of collection trends and user insights' },
+    collection: { title: 'Collection Records',      sub: 'Daily waste collection log and tracking' },
+    map:        { title: 'Waste Heat Map',          sub: 'Geographic visualization of collection activity' },
+    users:      { title: 'User Management',         sub: 'Manage residents and monitor account status' },
+    history:    { title: 'Collection History',      sub: 'Complete log of waste collection events' },
+    waste:      { title: 'Waste Reports',           sub: 'Manage and classify waste detection reports' },
+    messages:   { title: 'Messages',                sub: 'Resident communications and inquiries' },
+    posts:      { title: 'Posts Management',        sub: 'Manage community posts and announcements' },
+    profile:    { title: 'Admin Profile',           sub: 'Manage your account and credentials' },
   };
 
-  /* ─── Post Detail Modal ── */
+  // Post Modal
   const renderPostModal = () => {
     if (!selectedPost) return null;
     const post = selectedPost;
-    const adminDisplayName = getAdminDisplayName(post);
+    const adminDisplayName  = getAdminDisplayName(post);
     const adminRoleFromPost = getAdminRoleFromPost(post);
-    const adminBadge = getAdminBadgeStyle(adminRoleFromPost);
-    const adminTypeLabel = getAdminTypeLabel(adminRoleFromPost);
-    const roleIcon = ADMIN_ROLE_ICONS[adminRoleFromPost] || ADMIN_ROLE_ICONS.admin;
-    const catLabel = post.category ? post.category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General';
-    const catIcon  = CATEGORY_ICONS[post.category] || CATEGORY_ICONS.general;
-    const likeCount    = post.likes?.length || 0;
-    const commentCount = post.commentCount || post.comments?.length || 0;
+    const adminBadge        = getAdminBadgeStyle(adminRoleFromPost);
+    const adminTypeLabel    = getAdminTypeLabel(adminRoleFromPost);
+    const roleIcon          = ADMIN_ROLE_ICONS[adminRoleFromPost] || ADMIN_ROLE_ICONS.admin;
+    const catLabel          = post.category ? post.category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General';
+    const catIcon           = CATEGORY_ICONS[post.category] || CATEGORY_ICONS.general;
+    const likeCount         = post.likes?.length || 0;
+    const commentCount      = post.commentCount || post.comments?.length || 0;
 
     return (
       <div style={S.postModal} onClick={() => setSelectedPost(null)}>
@@ -1328,7 +1525,7 @@ const AdminDashboard = () => {
     );
   };
 
-  /* ─── Feed Panel ── */
+  // Feed Panel
   const renderFeedPanel = () => (
     <div style={S.feedPanel}>
       <div style={S.feedStickyHeader}>
@@ -1336,7 +1533,8 @@ const AdminDashboard = () => {
           <Icon d={ICONS.megaphone} size={14} color={C.navyDark} strokeWidth={2} />
           Announcements
         </h4>
-        <span style={S.viewAllLink} onClick={() => setActiveSection('posts')}
+        <span style={S.viewAllLink}
+          onClick={() => setActiveSection('posts')}
           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(79,195,247,0.15)'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(79,195,247,0.08)'; }}
         >
@@ -1351,17 +1549,17 @@ const AdminDashboard = () => {
             <div style={{ fontSize: 11, marginTop: 4, color: C.mutedGray }}>Create your first post</div>
           </div>
         ) : recentPosts.map((post) => {
-          const catIcon        = CATEGORY_ICONS[post.category] || CATEGORY_ICONS.general;
-          const likeCount      = post.likes?.length || 0;
-          const commentCount   = post.commentCount || post.comments?.length || 0;
-          const catLabel       = post.category ? post.category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General';
-          const adminDisplayName = getAdminDisplayName(post);
+          const catIcon           = CATEGORY_ICONS[post.category] || CATEGORY_ICONS.general;
+          const likeCount         = post.likes?.length || 0;
+          const commentCount      = post.commentCount || post.comments?.length || 0;
+          const catLabel          = post.category ? post.category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General';
+          const adminDisplayName  = getAdminDisplayName(post);
           const adminRoleFromPost = getAdminRoleFromPost(post);
-          const adminBadge     = getAdminBadgeStyle(adminRoleFromPost);
-          const adminTypeLabel = getAdminTypeLabel(adminRoleFromPost);
-          const roleIcon       = ADMIN_ROLE_ICONS[adminRoleFromPost] || ADMIN_ROLE_ICONS.admin;
-          const EXCERPT_LIMIT  = 120;
-          const isLong         = post.content.length > EXCERPT_LIMIT;
+          const adminBadge        = getAdminBadgeStyle(adminRoleFromPost);
+          const adminTypeLabel    = getAdminTypeLabel(adminRoleFromPost);
+          const roleIcon          = ADMIN_ROLE_ICONS[adminRoleFromPost] || ADMIN_ROLE_ICONS.admin;
+          const EXCERPT_LIMIT     = 120;
+          const isLong            = post.content.length > EXCERPT_LIMIT;
 
           return (
             <div key={post._id} style={S.postCard}
@@ -1435,22 +1633,35 @@ const AdminDashboard = () => {
     </div>
   );
 
-  /* ─── Charts Panel ── */
+  // Charts Panel
   const renderChartsPanel = () => (
     <div style={S.chartsPanel}>
       <div style={S.chartRow}>
         <div style={S.chartCard}>
-          <p style={S.chartCardTitle}><span style={S.chartDot(C.accent)} />Daily Trend — 14 days</p>
-          <div style={S.chartContainer}><Line data={dailyTrendsChartData} options={lineOptions} /></div>
+          <p style={S.chartCardTitle}>
+            <span style={S.chartDot(C.accent)} />
+            Daily Trend — 14 days
+          </p>
+          <div style={S.chartContainer}>
+            <Line data={dailyTrendsChartData} options={lineOptions} />
+          </div>
         </div>
         <div style={S.chartCard}>
-          <p style={S.chartCardTitle}><span style={S.chartDot(C.warning)} />Report Status</p>
-          <div style={S.chartContainer}><PolarArea data={statusPolarData} options={polarOptions} /></div>
+          <p style={S.chartCardTitle}>
+            <span style={S.chartDot(C.warning)} />
+            Report Status
+          </p>
+          <div style={S.chartContainer}>
+            <PolarArea data={statusPolarData} options={polarOptions} />
+          </div>
         </div>
       </div>
       <div style={S.chartRow}>
         <div style={S.chartCard}>
-          <p style={S.chartCardTitle}><span style={S.chartDot(C.success)} />Waste Classification</p>
+          <p style={S.chartCardTitle}>
+            <span style={S.chartDot(C.success)} />
+            Waste Classification
+          </p>
           <div style={S.chartContainer}>
             {Object.keys(classificationData).length > 0
               ? <Pie data={classificationChartData} options={pieChartOptions} />
@@ -1458,48 +1669,83 @@ const AdminDashboard = () => {
           </div>
         </div>
         <div style={S.chartCard}>
-          <p style={S.chartCardTitle}><span style={S.chartDot(C.danger)} />Top Locations</p>
+          <p style={S.chartCardTitle}>
+            <span style={S.chartDot(C.danger)} />
+            Most Scanned Items
+          </p>
           <div style={S.chartContainer}>
-            {locationAnalytics.top5Locations?.length > 0
-              ? <Bar data={locationChartData} options={barOptions} />
-              : <div style={{ textAlign: 'center', paddingTop: 60, color: C.mutedGray, fontSize: 12 }}>No location data</div>}
+            {mostScannedItems.length > 0
+              ? <Bar data={mostScannedBarData} options={barOptions} />
+              : <div style={{ textAlign: 'center', paddingTop: 60, color: C.mutedGray, fontSize: 12 }}>No scan data</div>}
           </div>
         </div>
       </div>
     </div>
   );
 
-  /* ─── Dashboard ── */
-  const renderDashboard = () => (
-    <>
-      <SectionHeading>System Overview</SectionHeading>
-      <div style={S.statsGrid}>
-        {statCards.map((card, i) => (
-          <div key={i} style={S.statCard}
-            onClick={() => card.navTo && setActiveSection(card.navTo)}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 6px 20px rgba(27,43,75,0.1)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 4px rgba(27,43,75,0.04)'; e.currentTarget.style.transform = 'none'; }}
-          >
-            <div style={S.statCardAccent(card.color)} />
-            <div style={S.statIconBox(card.color)}>
-              <Icon d={card.icon} size={17} color={card.color} strokeWidth={2} />
-            </div>
-            <div style={S.statLabel}>{card.label}</div>
-            <div style={S.statValue}>{card.value}</div>
-            <div style={S.statBadge(true)}>
-              <Icon d={ICONS.trending} size={10} color="currentColor" strokeWidth={2.5} />{card.footer}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={S.dashboardColumns}>
-        {renderChartsPanel()}
-        {renderFeedPanel()}
-      </div>
-    </>
-  );
+  // Dashboard
+  const renderDashboard = () => {
+    const weeklyGrowthPct = `${Math.abs(Math.round(dashboardStats.weeklyGrowth))}%`;
+    const weeklyUp        = dashboardStats.weeklyGrowth >= 0;
 
-  /* ─── Analytics ── */
+    return (
+      <>
+        <SectionHeading>System Overview</SectionHeading>
+        <div style={S.statsGrid}>
+          <StatCard
+            label="Total Reports"
+            value={dashboardStats.totalReports.toLocaleString()}
+            sub={`${weeklyGrowthPct} ${weeklyUp ? 'increase' : 'decrease'} vs last week`}
+            color={C.accent}
+            iconPath={ICONS.collection}
+            trendUp={weeklyUp}
+            trendPct={weeklyGrowthPct}
+            sparkData={sparkReports}
+            onClick={() => setActiveSection('collection')}
+          />
+          <StatCard
+            label="Total Weight Collected"
+            value={`${dashboardStats.totalWeight} kg`}
+            sub={`${dashboardStats.totalReports} items scanned`}
+            color={C.navyMid}
+            iconPath={ICONS.weight}
+            trendUp={true}
+            trendPct={weeklyGrowthPct}
+            sparkData={sparkWeight}
+            onClick={() => setActiveSection('collection')}
+          />
+          <StatCard
+            label="Total Users"
+            value={userAnalytics.totalUsers.toLocaleString()}
+            sub={`${userAnalytics.usersThisMonth} new this month`}
+            color={C.success}
+            iconPath={ICONS.users}
+            trendUp={true}
+            trendPct={`${userAnalytics.usersThisWeek} this wk`}
+            sparkData={sparkUsers}
+            onClick={() => setActiveSection('users')}
+          />
+          <StatCard
+            label="Active Locations"
+            value={locationAnalytics.totalUniqueLocations || 0}
+            sub={`${locationAnalytics.top5Locations?.length || 0} hotspot areas`}
+            color={C.danger}
+            iconPath={ICONS.location}
+            trendUp={false}
+            trendPct={`${locationAnalytics.top5Locations?.length || 0} hot`}
+            sparkData={sparkLocations}
+            onClick={() => setActiveSection('map')}
+          />
+        </div>
+        <div style={S.dashboardColumns}>
+          {renderChartsPanel()}
+          {renderFeedPanel()}
+        </div>
+      </>
+    );
+  };
+
+  // Analytics
   const renderAnalytics = () => {
     const activeRate = userAnalytics.totalUsers > 0 ? Math.round((userAnalytics.activeUsers / userAnalytics.totalUsers) * 100) : 0;
     const maleRate   = userAnalytics.totalUsers > 0 ? Math.round((userAnalytics.maleUsers   / userAnalytics.totalUsers) * 100) : 0;
@@ -1508,11 +1754,9 @@ const AdminDashboard = () => {
       <>
         <Analytics adminRole={adminRole} barangayName={getBarangayName(adminRole)} />
 
-        {/* ── User Analytics ── */}
         <SectionHeading>User Analytics</SectionHeading>
         <div style={S.userAnalyticsCard}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid rgba(27,43,75,0.07)' }}>
-            {/* Status */}
             <div style={{ padding: '0 20px 0 0', borderRight: '1px solid rgba(27,43,75,0.07)', marginRight: 20 }}>
               <div style={S.userStatSectionLabel}>User Status</div>
               <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
@@ -1528,7 +1772,6 @@ const AdminDashboard = () => {
               <div style={{ fontSize: 11, color: C.mutedGray, marginBottom: 5 }}>Active Rate: {activeRate}%</div>
               <div style={S.activeRateBar}><div style={S.activeRateFill(activeRate, C.success)} /></div>
             </div>
-            {/* Gender */}
             <div style={{ padding: '0 20px', borderRight: '1px solid rgba(27,43,75,0.07)' }}>
               <div style={S.userStatSectionLabel}>Gender Distribution</div>
               <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
@@ -1544,7 +1787,6 @@ const AdminDashboard = () => {
               <div style={{ fontSize: 11, color: C.mutedGray, marginBottom: 5 }}>Male: {maleRate}% · Female: {100 - maleRate}%</div>
               <div style={S.activeRateBar}><div style={S.activeRateFill(maleRate, C.accent)} /></div>
             </div>
-            {/* Growth */}
             <div style={{ padding: '0 0 0 20px' }}>
               <div style={S.userStatSectionLabel}>Growth</div>
               <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
@@ -1561,7 +1803,6 @@ const AdminDashboard = () => {
               <div style={{ fontSize: 11, color: C.mutedGray }}>Total Registered Users</div>
             </div>
           </div>
-          {/* Radar */}
           <div>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: C.navyDark, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 7 }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.success, display: 'inline-block', flexShrink: 0 }} />
@@ -1575,11 +1816,8 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* ── FIXED: Waste Analytics 2-col layout ── */}
         <SectionHeading>Waste Analytics</SectionHeading>
         <div style={S.wasteAnalyticsGrid}>
-
-          {/* LEFT COL: Classification Breakdown */}
           <div style={{ ...S.wasteCol, borderRight: '1px solid rgba(27,43,75,0.07)' }}>
             <div style={S.colHeader}>
               <span style={S.colHeaderDot(C.accent)} />
@@ -1596,11 +1834,7 @@ const AdminDashboard = () => {
               </div>
             )}
           </div>
-
-          {/* RIGHT COL: Most Scanned Items + Total Collected stacked */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-
-            {/* TOP: Most Scanned Items */}
             <div style={{ ...S.wasteCol, borderBottom: '1px solid rgba(27,43,75,0.07)' }}>
               <div style={S.colHeader}>
                 <span style={S.colHeaderDot(C.navyMid)} />
@@ -1609,7 +1843,7 @@ const AdminDashboard = () => {
               {mostScannedItems.length > 0 ? (
                 <>
                   <div style={{ height: 150, marginBottom: 12 }}>
-                    <Line data={mostScannedLineData} options={lineOptions} />
+                    <Bar data={mostScannedBarData} options={barOptions} />
                   </div>
                   <div style={{ borderTop: '1px solid rgba(27,43,75,0.06)', paddingTop: 10 }}>
                     {mostScannedItems.slice(0, 5).map(([label, count], idx) => (
@@ -1631,56 +1865,42 @@ const AdminDashboard = () => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
 
-            {/* BOTTOM: Total Collected — horizontal layout */}
-            <div style={{
-              ...S.weightBlock,
-              padding: '20px 24px',
-            }}>
-              {/* Left: weight circle + label */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>
-                  Total Collected
-                </div>
-                <div style={S.weightCircle}>
-                  <div style={S.weightNum}>{dashboardStats.totalWeight.toFixed(1)}</div>
-                  <div style={S.weightUnit}>kg</div>
-                </div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 8 }}>
-                  {dashboardStats.totalReports} reports
-                </div>
+        <div style={S.totalCollectedFull}>
+          <div style={S.totalCollectedContent}>
+            <div style={S.totalCollectedLeft}>
+              <div style={S.weightCircleLarge}>
+                <div style={S.weightNumLarge}>{dashboardStats.totalWeight}</div>
+                <div style={S.weightUnitLarge}>kg</div>
               </div>
-
-              {/* Right: status bars */}
-              <div style={{ flex: 1 }}>
+              <div style={S.statusBarsContainer}>
                 {[
                   { label: 'Recycled',  value: dashboardStats.recycledReports,  color: C.success },
                   { label: 'Processed', value: dashboardStats.processedReports, color: C.accent  },
                   { label: 'Pending',   value: dashboardStats.pendingReports,   color: C.warning  },
                   { label: 'Disposed',  value: dashboardStats.disposedReports,  color: C.danger   },
                 ].map(({ label, value, color }) => (
-                  <div key={label} style={{ width: '100%', marginBottom: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.04em' }}>{label}</span>
-                      <span style={{ fontSize: 11, fontWeight: 700, color }}>{value}</span>
+                  <div key={label} style={S.statusBarItem}>
+                    <div style={S.statusBarLabel}>
+                      <span style={S.statusBarLabelText}>{label}</span>
+                      <span style={S.statusBarValue}>{value}</span>
                     </div>
-                    <div style={{ height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{
-                        height: '100%',
-                        width: `${dashboardStats.totalReports > 0 ? (value / dashboardStats.totalReports) * 100 : 0}%`,
-                        background: color, borderRadius: 3,
-                        transition: 'width 0.6s ease',
-                      }} />
+                    <div style={S.statusBarTrack}>
+                      <div style={S.statusBarFill(color, dashboardStats.totalReports > 0 ? (value / dashboardStats.totalReports) * 100 : 0)} />
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-
+            <div style={S.totalCollectedRight}>
+              <div style={S.totalReportsValue}>{dashboardStats.totalReports}</div>
+              <div style={S.totalReportsText}>Total Reports</div>
+            </div>
           </div>
         </div>
 
-        {/* ── Location Breakdown ── */}
         <div style={S.locationCard}>
           <div style={S.locationHeader}>
             <div style={S.colHeader}>
@@ -1694,19 +1914,15 @@ const AdminDashboard = () => {
               </div>
             )}
           </div>
-
           {locationDetections.length > 0 ? (
             <>
               <div style={S.locationTableHeader}>
-                <span>#</span>
-                <span>Location</span>
+                <span>#</span><span>Location</span>
                 <span style={{ textAlign: 'center' }}>Reports</span>
                 <span style={{ textAlign: 'center' }}>Detections</span>
               </div>
               {locationDetections.map((loc) => (
-                <div
-                  key={loc.rank}
-                  style={S.locationRow}
+                <div key={loc.rank} style={S.locationRow}
                   onMouseEnter={e => { e.currentTarget.style.background = C.pageBg; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   onClick={() => console.log('Selected location:', loc)}
@@ -1719,12 +1935,7 @@ const AdminDashboard = () => {
                   </span>
                 </div>
               ))}
-              <div style={{
-                marginTop: 16, paddingTop: 12,
-                borderTop: '1px solid rgba(27,43,75,0.07)',
-                display: 'flex', justifyContent: 'space-between',
-                fontSize: 11.5, color: C.mutedGray,
-              }}>
+              <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid rgba(27,43,75,0.07)', display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: C.mutedGray }}>
                 <span>Total Locations: {locationDetections.length}</span>
                 <span>Total Reports: {locationDetections.reduce((sum, loc) => sum + loc.reports, 0)}</span>
                 <span>Total Detections: {locationDetections.reduce((sum, loc) => sum + loc.detections, 0)}</span>
@@ -1804,7 +2015,6 @@ const AdminDashboard = () => {
         .leaflet-popup-tip { display: none; }
       `}</style>
 
-      {/* SIDEBAR */}
       <aside style={S.sidebar}>
         <div style={S.sidebarHeader}>
           <div style={S.logoWrap}>
@@ -1863,7 +2073,6 @@ const AdminDashboard = () => {
         </div>
       </aside>
 
-      {/* MAIN */}
       <main style={S.main}>
         <div style={S.topbar}>
           <div>
@@ -1872,7 +2081,7 @@ const AdminDashboard = () => {
           </div>
           <div style={S.dateChip}>
             <Icon d={ICONS.calendar} size={13} color={C.bodyGray} strokeWidth={1.8} />
-            {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}
+            {new Date().toLocaleDateString('US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </div>
 
@@ -1889,7 +2098,6 @@ const AdminDashboard = () => {
         <div style={S.content}>{renderSection()}</div>
       </main>
 
-      {/* LOGOUT MODAL */}
       {showLogoutConfirm && (
         <div style={S.overlay} onClick={() => setShowLogoutConfirm(false)}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
