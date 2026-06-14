@@ -43,27 +43,23 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// ==================== SCIENTIFIC CO2 EMISSION FACTORS (IPCC/EPA BASED) ====================
+// ==================== SCIENTIFIC CO2 EMISSION FACTORS ====================
 const SCIENTIFIC_CO2_FACTORS = {
   landfill: {
     plastic: 1.5, paper: 0.9, glass: 0.02, metal: 0.05,
-    aluminum: 0.05, organic: 1.2, electronic: 0.8, textile: 0.7, cardboard: 0.5,
-    default: 0.5,
+    aluminum: 0.05, organic: 1.2, electronic: 0.8, textile: 0.7, cardboard: 0.5, default: 0.5,
   },
   recycling: {
     plastic: -1.2, paper: -1.1, glass: -0.3, metal: -4.0,
-    aluminum: -8.0, organic: -0.2, electronic: -2.5, textile: -1.5, cardboard: -1.0,
-    default: -1.0,
+    aluminum: -8.0, organic: -0.2, electronic: -2.5, textile: -1.5, cardboard: -1.0, default: -1.0,
   },
   incineration: {
     plastic: 2.8, paper: 1.5, glass: 0.1, metal: 0.1,
-    aluminum: 0.1, organic: 0.5, electronic: 1.8, textile: 2.0, cardboard: 1.3,
-    default: 1.0,
+    aluminum: 0.1, organic: 0.5, electronic: 1.8, textile: 2.0, cardboard: 1.3, default: 1.0,
   },
   processing: {
     plastic: 0.3, paper: 0.2, glass: 0.1, metal: 0.2,
-    aluminum: 0.2, organic: 0.1, electronic: 0.4, textile: 0.3, cardboard: 0.2,
-    default: 0.2,
+    aluminum: 0.2, organic: 0.1, electronic: 0.4, textile: 0.3, cardboard: 0.2, default: 0.2,
   },
   transportation: 0.0002,
 };
@@ -78,7 +74,7 @@ const RECYCLED_EMISSIONS = {
   aluminum: 2.0, electronic: 1.0, textile: 0.8, cardboard: 0.5, default: 0.6,
 };
 
-// ==================== WEIGHT CALCULATION FUNCTIONS ====================
+// ==================== WEIGHT CALCULATION ====================
 const calculateItemWeight = (classification, detectedObjectLabel) => {
   const weights = {
     plastic: { default: 0.04, bottle: 0.05, bag: 0.01, container: 0.08, cup: 0.03, straw: 0.002 },
@@ -91,11 +87,9 @@ const calculateItemWeight = (classification, detectedObjectLabel) => {
     textile: { default: 0.25, shirt: 0.20, pants: 0.40, jeans: 0.50, jacket: 0.60 },
     cardboard: { default: 0.25, box: 0.50, sheet: 0.15, carton: 0.10 },
   };
-  
   const classKey = (classification || '').toLowerCase().trim();
   const rawLabel = (detectedObjectLabel || '').toLowerCase().trim();
   const category = weights[classKey] || { default: 0.10 };
-  
   for (const [keyword, weight] of Object.entries(category)) {
     if (rawLabel.includes(keyword)) return weight;
   }
@@ -104,71 +98,56 @@ const calculateItemWeight = (classification, detectedObjectLabel) => {
 
 const calculateTotalWeight = (report) => {
   const quantity = (report.detectedObjects && report.detectedObjects.length > 0)
-    ? report.detectedObjects.length
-    : 1;
+    ? report.detectedObjects.length : 1;
   const classKey = (report.classification || '').toLowerCase().trim();
   const rawLabel = (report.detectedObjects?.[0]?.label || '').toLowerCase().trim();
   const unitWeight = calculateItemWeight(classKey, rawLabel);
   return unitWeight * quantity;
 };
 
-const calculateMethaneEmissions = (organicWeight) => {
-  const methanePotential = 0.2;
-  const methaneDensity = 0.717;
-  const methaneGWP = 25;
-  const methaneMass = organicWeight * methanePotential * methaneDensity;
-  return methaneMass * methaneGWP;
-};
-
-const calculateRecyclingSavings = (wasteType, weight) => {
-  const virgin = VIRGIN_EMISSIONS[wasteType] || VIRGIN_EMISSIONS.default;
-  const recycled = RECYCLED_EMISSIONS[wasteType] || RECYCLED_EMISSIONS.default;
-  return (virgin - recycled) * weight;
-};
-
 const calculateCO2Emission = (report, weight) => {
   const wasteType = (report.classification || '').toLowerCase();
   const status = report.status || 'pending';
   const distance = 10;
-  
   let baseEmission = 0;
-  
   switch (status) {
     case 'recycled':
-      baseEmission = (SCIENTIFIC_CO2_FACTORS.recycling[wasteType] || SCIENTIFIC_CO2_FACTORS.recycling.default) * weight;
-      break;
+      baseEmission = (SCIENTIFIC_CO2_FACTORS.recycling[wasteType] || SCIENTIFIC_CO2_FACTORS.recycling.default) * weight; break;
     case 'processed':
-      baseEmission = (SCIENTIFIC_CO2_FACTORS.processing[wasteType] || SCIENTIFIC_CO2_FACTORS.processing.default) * weight;
-      break;
+      baseEmission = (SCIENTIFIC_CO2_FACTORS.processing[wasteType] || SCIENTIFIC_CO2_FACTORS.processing.default) * weight; break;
     case 'incinerated':
-      baseEmission = (SCIENTIFIC_CO2_FACTORS.incineration[wasteType] || SCIENTIFIC_CO2_FACTORS.incineration.default) * weight;
-      break;
+      baseEmission = (SCIENTIFIC_CO2_FACTORS.incineration[wasteType] || SCIENTIFIC_CO2_FACTORS.incineration.default) * weight; break;
     default:
-      baseEmission = (SCIENTIFIC_CO2_FACTORS.landfill[wasteType] || SCIENTIFIC_CO2_FACTORS.landfill.default) * weight;
-      break;
+      baseEmission = (SCIENTIFIC_CO2_FACTORS.landfill[wasteType] || SCIENTIFIC_CO2_FACTORS.landfill.default) * weight; break;
   }
-  
   let transportEmission = 0;
   if (status !== 'recycled' && status !== 'processed') {
     transportEmission = weight * distance * SCIENTIFIC_CO2_FACTORS.transportation;
   }
-  
   return baseEmission + transportEmission;
 };
 
-// ==================== THEME CONSTANTS ====================
+// ==================== THEME ====================
 const C = {
   navyDark:  '#1B2B4B',
   navyMid:   '#2C4070',
   accent:    '#4FC3F7',
+  accentDeep:'#0288D1',
   success:   '#4CAF50',
-  warning:   '#FF9800',
-  danger:    '#F44336',
+  successBg: '#E8F5E9',
+  warning:   '#F59E0B',
+  warningBg: '#FFFBEB',
+  danger:    '#EF4444',
+  dangerBg:  '#FEF2F2',
+  purple:    '#8B5CF6',
+  purpleBg:  '#EDE9FE',
   deepDark:  '#0F1E38',
   bodyGray:  '#546E7A',
   mutedGray: '#90A4AE',
   pageBg:    '#F0F4F8',
-  white:     '#FFFFFF',
+  cardBg:    '#FFFFFF',
+  border:    'rgba(27,43,75,0.08)',
+  borderMid: 'rgba(27,43,75,0.12)',
 };
 
 const getCatBadgeStyle = (category) => {
@@ -221,560 +200,6 @@ const getAdminBadgeStyle = (role) => {
   return map[role] || map.admin;
 };
 
-// ==================== STYLES ====================
-const S = {
-  root: {
-    display: 'flex', minHeight: '100vh',
-    background: C.pageBg,
-    fontFamily: "'Inter', 'DM Sans', 'Segoe UI', sans-serif",
-    color: C.navyDark,
-  },
-  sidebar: {
-    width: 252, minHeight: '100vh',
-    background: C.deepDark,
-    display: 'flex', flexDirection: 'column',
-    position: 'fixed', top: 0, left: 0, bottom: 0,
-    zIndex: 100,
-    boxShadow: '4px 0 32px rgba(15,30,56,0.28)',
-  },
-  sidebarHeader: {
-    padding: '22px 18px 18px',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-  },
-  logoWrap: { display: 'flex', alignItems: 'center', gap: 11 },
-  logoImg: {
-    width: 38, height: 38, objectFit: 'contain', borderRadius: 8,
-    background: 'rgba(255,255,255,0.06)', padding: 4,
-    border: '1px solid rgba(79,195,247,0.18)', flexShrink: 0,
-  },
-  logoTitle: {
-    fontSize: 13, fontWeight: 700, color: C.white,
-    letterSpacing: '0.06em', lineHeight: 1.2, textTransform: 'uppercase',
-  },
-  logoSub: {
-    fontSize: 9, color: C.accent, marginTop: 3,
-    letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.85,
-  },
-  nav: { flex: 1, padding: '14px 10px', overflowY: 'auto' },
-  navSection: { marginBottom: 20 },
-  navSectionLabel: {
-    fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em',
-    textTransform: 'uppercase', color: 'rgba(255,255,255,0.22)',
-    padding: '0 10px', marginBottom: 4,
-  },
-  navItem: (active) => ({
-    display: 'flex', alignItems: 'center', gap: 9,
-    padding: '8px 10px', borderRadius: 7, cursor: 'pointer',
-    fontSize: 12.5, fontWeight: active ? 600 : 400,
-    color: active ? C.white : 'rgba(255,255,255,0.45)',
-    background: active ? 'rgba(79,195,247,0.12)' : 'transparent',
-    borderLeft: active ? `2px solid ${C.accent}` : '2px solid transparent',
-    transition: 'all 0.15s ease',
-    marginBottom: 1, userSelect: 'none',
-  }),
-  sidebarFooter: {
-    padding: '12px 10px',
-    borderTop: '1px solid rgba(255,255,255,0.06)',
-  },
-  adminMini: {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '10px 10px', borderRadius: 8, marginBottom: 8,
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.06)',
-    cursor: 'pointer', transition: 'background 0.15s',
-  },
-  avatar: {
-    width: 34, height: 34, borderRadius: 8,
-    background: 'rgba(79,195,247,0.14)',
-    border: '1px solid rgba(79,195,247,0.25)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 13, fontWeight: 600, color: C.accent,
-    flexShrink: 0, overflow: 'hidden', letterSpacing: '0.02em',
-  },
-  adminName: { fontSize: 12.5, fontWeight: 600, color: C.white },
-  adminRole: { fontSize: 10, color: 'rgba(255,255,255,0.32)', marginTop: 2 },
-  logoutBtn: {
-    width: '100%', display: 'flex', alignItems: 'center',
-    justifyContent: 'center', gap: 7, padding: '8px 10px',
-    borderRadius: 7, border: '1px solid rgba(244,67,54,0.3)',
-    background: 'rgba(244,67,54,0.07)', color: '#ff5c5e',
-    fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
-    transition: 'all 0.15s ease', fontFamily: "'Inter', 'DM Sans', sans-serif",
-    letterSpacing: '0.05em', textTransform: 'uppercase',
-  },
-  main: { marginLeft: 252, flex: 1, minHeight: '100vh', background: C.pageBg },
-  topbar: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '16px 28px', borderBottom: '1px solid rgba(27,43,75,0.08)',
-    background: C.white, position: 'sticky', top: 0, zIndex: 50,
-    boxShadow: '0 1px 8px rgba(27,43,75,0.06)',
-  },
-  pageTitle: {
-    fontSize: 18, fontWeight: 700, color: C.navyDark,
-    margin: 0, letterSpacing: '-0.01em', lineHeight: 1.25,
-  },
-  pageSub: { fontSize: 12, color: C.bodyGray, margin: '3px 0 0' },
-  dateChip: {
-    fontSize: 12, color: C.bodyGray, background: C.pageBg,
-    border: '1px solid rgba(27,43,75,0.1)', borderRadius: 7,
-    padding: '6px 13px', fontWeight: 500,
-    display: 'flex', alignItems: 'center', gap: 6,
-  },
-  content: { padding: '24px 28px' },
-  sectionTitle: {
-    fontSize: 10.5, fontWeight: 700, letterSpacing: '0.11em',
-    textTransform: 'uppercase', color: C.mutedGray,
-    marginBottom: 14, marginTop: 0,
-    display: 'flex', alignItems: 'center', gap: 8,
-  },
-  sectionLine: { flex: 1, height: 1, background: 'rgba(27,43,75,0.08)' },
-  statsGrid: {
-    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: 14, marginBottom: 24,
-  },
-  statCard: {
-    background: C.white,
-    border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12,
-    overflow: 'hidden',
-    position: 'relative',
-    transition: 'box-shadow 0.2s, transform 0.18s',
-    cursor: 'pointer',
-    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  statCardAccent: (color) => ({
-    height: 3,
-    width: '100%',
-    background: color,
-    flexShrink: 0,
-  }),
-  statCardBody: {
-    padding: '14px 16px 0',
-    display: 'flex',
-    flexDirection: 'column',
-    flex: 1,
-  },
-  statCardTop: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  statIconBox: (color) => ({
-    width: 36, height: 36, borderRadius: 9,
-    background: color + '18',
-    border: '1px solid ' + color + '30',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  }),
-  statTrendBadge: (positive) => ({
-    display: 'inline-flex', alignItems: 'center', gap: 3,
-    fontSize: 10.5, fontWeight: 700,
-    color: positive ? C.success : C.danger,
-    background: positive ? 'rgba(76,175,80,0.12)' : 'rgba(244,67,54,0.12)',
-    padding: '3px 8px', borderRadius: 20,
-  }),
-  statLabel: {
-    fontSize: 10, color: C.bodyGray, fontWeight: 600,
-    marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.07em',
-  },
-  statValue: {
-    fontSize: 24, fontWeight: 800, color: C.navyDark,
-    lineHeight: 1, letterSpacing: '-0.02em',
-  },
-  statSub: {
-    fontSize: 10.5, color: C.mutedGray, marginTop: 4, marginBottom: 0,
-  },
-  sparklineWrap: {
-    height: 56,
-    marginTop: 10,
-    overflow: 'hidden',
-  },
-  dashboardColumns: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 360px',
-    gap: 16, alignItems: 'start',
-  },
-  chartsPanel: { display: 'flex', flexDirection: 'column', gap: 16 },
-  chartCard: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12, padding: '18px 20px',
-    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
-  },
-  chartCardTitle: {
-    fontSize: 13, fontWeight: 700, color: C.navyDark,
-    marginBottom: 14, marginTop: 0,
-    display: 'flex', alignItems: 'center', gap: 8,
-  },
-  chartDot: (color) => ({
-    width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0,
-  }),
-  chartRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 },
-  chartContainer: { height: 220, marginTop: 4 },
-  feedPanel: {
-    display: 'flex', flexDirection: 'column',
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12, overflow: 'hidden',
-    position: 'sticky', top: 82,
-    maxHeight: 'calc(100vh - 100px)',
-    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
-  },
-  feedStickyHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '14px 16px 10px',
-    borderBottom: '1px solid rgba(27,43,75,0.07)',
-    background: C.white, position: 'sticky', top: 0, zIndex: 10, flexShrink: 0,
-  },
-  feedScrollArea: { overflowY: 'auto', flex: 1, padding: '10px' },
-  feedTitle: {
-    fontSize: 14, fontWeight: 700, color: C.navyDark, margin: 0,
-    display: 'flex', alignItems: 'center', gap: 6,
-  },
-  viewAllLink: {
-    color: C.accent, fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
-    display: 'inline-flex', alignItems: 'center', gap: 4,
-    padding: '4px 10px', borderRadius: 6,
-    background: 'rgba(79,195,247,0.08)', border: '1px solid rgba(79,195,247,0.2)',
-    transition: 'all 0.15s', textDecoration: 'none',
-  },
-  postCard: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12, marginBottom: 10, overflow: 'hidden',
-    boxShadow: '0 1px 3px rgba(27,43,75,0.04)', transition: 'box-shadow 0.15s',
-  },
-  postCardHeader: {
-    display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px 8px',
-  },
-  postAvatar: {
-    width: 40, height: 40, borderRadius: '50%',
-    background: C.navyMid,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 13, fontWeight: 700, color: C.white,
-    flexShrink: 0, overflow: 'hidden',
-  },
-  postAuthorName: { fontSize: 13, fontWeight: 700, color: C.navyDark, margin: 0 },
-  postAuthorMeta: { display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, flexWrap: 'wrap' },
-  postBody: { padding: '0 14px 10px' },
-  postTitle: { fontSize: 13, fontWeight: 700, color: C.navyDark, margin: '0 0 4px' },
-  postExcerpt: { fontSize: 12, color: C.bodyGray, lineHeight: 1.6, margin: 0 },
-  seeMore: {
-    color: C.accent, cursor: 'pointer', fontSize: 12,
-    fontWeight: 600, marginTop: 3, display: 'inline-block',
-  },
-  postImage: { width: '100%', display: 'block', maxHeight: 200, objectFit: 'cover' },
-  postFooter: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '7px 14px', borderTop: '1px solid rgba(27,43,75,0.05)',
-    fontSize: 11, color: C.mutedGray,
-  },
-  postStat: { display: 'flex', alignItems: 'center', gap: 3 },
-  postActions: { display: 'flex', borderTop: '1px solid rgba(27,43,75,0.05)' },
-  postActionBtn: {
-    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    gap: 5, padding: '8px 0', fontSize: 11.5, fontWeight: 600, color: C.bodyGray,
-    cursor: 'pointer', background: 'none', border: 'none',
-    borderRight: '1px solid rgba(27,43,75,0.05)',
-    fontFamily: "'Inter', 'DM Sans', sans-serif", transition: 'background 0.15s',
-  },
-  feedEmpty: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 10, textAlign: 'center', padding: '36px 20px', color: C.mutedGray,
-  },
-  postModal: {
-    position: 'fixed', inset: 0, background: 'rgba(15,30,56,0.65)',
-    backdropFilter: 'blur(4px)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    zIndex: 9999, padding: 16,
-  },
-  postModalBox: {
-    background: C.white, borderRadius: 16,
-    width: '100%', maxWidth: 520, maxHeight: '88vh',
-    overflow: 'hidden', display: 'flex', flexDirection: 'column',
-    border: '1px solid rgba(27,43,75,0.1)',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
-  },
-  postModalHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '14px 18px', borderBottom: '1px solid rgba(27,43,75,0.07)', flexShrink: 0,
-  },
-  postModalBody: { overflowY: 'auto', flex: 1 },
-  postModalCloseBtn: {
-    width: 30, height: 30, borderRadius: '50%',
-    background: C.pageBg, border: '1px solid rgba(27,43,75,0.1)',
-    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 16, color: C.bodyGray, fontFamily: "'Inter',sans-serif", lineHeight: 1,
-  },
-  collectionTable: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12, overflow: 'hidden',
-    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
-  },
-  tableHeader: {
-    display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
-    background: '#F8FAFC', padding: '11px 16px',
-    fontWeight: 700, fontSize: 10.5, color: C.navyDark,
-    borderBottom: '1px solid rgba(27,43,75,0.08)',
-    textTransform: 'uppercase', letterSpacing: '0.06em',
-  },
-  tableRow: {
-    display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
-    padding: '11px 16px', fontSize: 13, color: C.bodyGray,
-    borderBottom: '1px solid rgba(27,43,75,0.04)', transition: 'background 0.15s',
-  },
-  statusBadge: (status) => ({
-    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px',
-    borderRadius: 5, fontSize: 11, fontWeight: 600,
-    background:
-      status === 'completed' || status === 'recycled' ? '#E8F5E9' :
-      status === 'pending' ? '#FFF3E0' : '#FFEBEE',
-    color:
-      status === 'completed' || status === 'recycled' ? C.success :
-      status === 'pending' ? C.warning : C.danger,
-  }),
-  mapContainer: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12, minHeight: 500, overflow: 'hidden', position: 'relative',
-    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
-  },
-  mapLegend: {
-    position: 'absolute', bottom: 20, right: 20,
-    background: 'rgba(255,255,255,0.97)', padding: '12px 16px',
-    borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-    zIndex: 1000, fontSize: 12, border: '1px solid rgba(27,43,75,0.08)',
-  },
-  mapLegendTitle: { fontWeight: 700, marginBottom: 8, color: C.navyDark, fontSize: 11 },
-  legendGradient: {
-    width: 190, height: 10,
-    background: 'linear-gradient(to right, #00ff00, #ffff00, #ff0000)',
-    borderRadius: 6, marginBottom: 6,
-  },
-  legendLabels: { display: 'flex', justifyContent: 'space-between', fontSize: 10, color: C.bodyGray },
-  mapControls: { position: 'absolute', top: 20, right: 20, zIndex: 1000, display: 'flex', gap: 8 },
-  mapControlBtn: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.1)',
-    borderRadius: 6, padding: '7px 12px', cursor: 'pointer',
-    fontSize: 12, fontWeight: 500, color: C.navyDark, transition: 'all 0.15s',
-    display: 'flex', alignItems: 'center', gap: 6,
-  },
-  mapInfo: {
-    position: 'absolute', bottom: 20, left: 20,
-    background: 'rgba(255,255,255,0.97)', padding: '7px 12px',
-    borderRadius: 6, fontSize: 11, color: C.bodyGray,
-    zIndex: 1000, border: '1px solid rgba(27,43,75,0.08)',
-    display: 'flex', alignItems: 'center', gap: 6,
-  },
-  locationRanking: {
-    position: 'absolute', top: 20, left: 20,
-    background: 'rgba(255,255,255,0.97)', padding: '12px 16px',
-    borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-    zIndex: 1000, fontSize: 12, border: '1px solid rgba(27,43,75,0.08)', maxWidth: 250,
-  },
-  locationRankingTitle: {
-    fontWeight: 700, marginBottom: 8, color: C.navyDark, fontSize: 11,
-    borderBottom: '1px solid rgba(27,43,75,0.08)', paddingBottom: 6,
-    display: 'flex', alignItems: 'center', gap: 6,
-  },
-  rankingItem: { display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 11 },
-  rankingName: { fontWeight: 500, color: C.bodyGray },
-  rankingCount: {
-    color: C.white, fontWeight: 700, fontSize: 10,
-    background: C.danger, borderRadius: 4, padding: '1px 6px',
-  },
-  historyItem: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 10, padding: '14px 16px', marginBottom: 8,
-    transition: 'all 0.15s', boxShadow: '0 1px 3px rgba(27,43,75,0.04)',
-  },
-  historyRow: { display: 'flex', gap: 16, fontSize: 12, color: C.bodyGray },
-  overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(15,30,56,0.7)',
-    backdropFilter: 'blur(4px)', display: 'flex',
-    alignItems: 'center', justifyContent: 'center', zIndex: 9999,
-  },
-  modal: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.1)',
-    borderRadius: 14, padding: 32, width: 480, maxWidth: '90vw',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.16)',
-  },
-  modalTitle: { fontSize: 18, fontWeight: 700, color: C.navyDark, marginBottom: 10, marginTop: 0 },
-  modalDesc: { fontSize: 13.5, color: C.bodyGray, lineHeight: 1.7, marginBottom: 24 },
-  modalActions: { display: 'flex', gap: 10, justifyContent: 'flex-end' },
-  btnSecondary: {
-    padding: '9px 18px', borderRadius: 7,
-    border: '1px solid rgba(27,43,75,0.12)', background: 'transparent',
-    color: C.bodyGray, fontSize: 13, fontWeight: 600,
-    cursor: 'pointer', fontFamily: "'Inter', 'DM Sans', sans-serif",
-  },
-  btnDanger: {
-    padding: '9px 18px', borderRadius: 7, border: 'none',
-    background: C.danger, color: C.white, fontSize: 13, fontWeight: 700,
-    cursor: 'pointer', fontFamily: "'Inter', 'DM Sans', sans-serif",
-    display: 'flex', alignItems: 'center', gap: 7,
-  },
-  errorBar: {
-    display: 'flex', alignItems: 'center', gap: 10,
-    background: '#FFEBEE', border: '1px solid #FFCDD2',
-    borderRadius: 8, padding: '10px 16px',
-    margin: '0 28px 16px', fontSize: 13, color: C.danger,
-  },
-  errClose: {
-    marginLeft: 'auto', background: 'none', border: 'none',
-    color: C.danger, cursor: 'pointer', fontSize: 18, lineHeight: 1,
-  },
-  analyticsCard: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12, padding: '20px',
-    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
-  },
-  analyticsCardTitle: {
-    fontSize: 13, fontWeight: 700, color: C.navyDark,
-    marginBottom: 16, marginTop: 0,
-    display: 'flex', alignItems: 'center', gap: 8, letterSpacing: '0.01em',
-  },
-  titleDot: (color) => ({
-    width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0,
-  }),
-  userAnalyticsCard: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12, padding: '20px',
-    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
-    marginBottom: 16,
-  },
-  userStatsRow: {
-    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: 0, marginBottom: 20,
-  },
-  userStatSectionLabel: {
-    fontSize: 10, fontWeight: 700, letterSpacing: '0.09em',
-    textTransform: 'uppercase', color: C.mutedGray, marginBottom: 10,
-  },
-  activeRateBar: {
-    height: 5, borderRadius: 3, background: 'rgba(27,43,75,0.07)',
-    overflow: 'hidden', marginTop: 6,
-  },
-  activeRateFill: (pct, color) => ({
-    height: '100%', width: `${pct}%`,
-    background: color, borderRadius: 3,
-    transition: 'width 0.6s ease',
-  }),
-  wasteAnalyticsGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 0,
-    background: C.white,
-    border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12,
-    overflow: 'hidden',
-    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
-    marginBottom: 16,
-  },
-  wasteCol: { padding: '20px' },
-  colHeader: { display: 'flex', alignItems: 'center', gap: 7, marginBottom: 16 },
-  colHeaderDot: (color) => ({
-    width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0,
-  }),
-  colTitle: { fontSize: 12.5, fontWeight: 700, color: C.navyDark, margin: 0, letterSpacing: '0.01em' },
-  scannedItem: {
-    display: 'flex', alignItems: 'center',
-    padding: '8px 0', borderBottom: '1px solid rgba(27,43,75,0.05)',
-  },
-  scannedRank: { width: 28, fontSize: 11, fontWeight: 700, color: C.mutedGray, flexShrink: 0 },
-  scannedLabel: { flex: 1, fontSize: 12.5, fontWeight: 500, color: C.navyDark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  scannedBadge: (color) => ({
-    fontSize: 11, fontWeight: 700, color: C.white, background: color,
-    padding: '2px 10px', borderRadius: 20, flexShrink: 0, marginLeft: 8,
-  }),
-  totalCollectedFull: {
-    background: `linear-gradient(135deg, ${C.deepDark} 0%, ${C.navyMid} 100%)`,
-    padding: '24px 32px',
-    marginTop: 0,
-    borderRadius: 0,
-  },
-  totalCollectedContent: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 24,
-  },
-  totalCollectedLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 32,
-    flexWrap: 'wrap',
-  },
-  weightCircleLarge: {
-    width: 100,
-    height: 100,
-    borderRadius: '50%',
-    border: `3px solid ${C.accent}`,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(79,195,247,0.07)',
-    flexShrink: 0,
-  },
-  weightNumLarge: { fontSize: 26, fontWeight: 900, color: C.accent, lineHeight: 1, letterSpacing: '-0.02em' },
-  weightUnitLarge: { fontSize: 12, fontWeight: 600, color: C.accent, opacity: 0.7, marginTop: 2 },
-  statusBarsContainer: {
-    flex: 1,
-    minWidth: 260,
-  },
-  statusBarItem: { width: '100%', marginBottom: 14 },
-  statusBarLabel: { display: 'flex', justifyContent: 'space-between', marginBottom: 5 },
-  statusBarLabelText: { fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.04em' },
-  statusBarValue: { fontSize: 11, fontWeight: 700, color: C.white },
-  statusBarTrack: { height: 5, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' },
-  statusBarFill: (color, percent) => ({
-    height: '100%',
-    width: `${percent}%`,
-    background: color,
-    borderRadius: 3,
-    transition: 'width 0.6s ease',
-  }),
-  totalCollectedRight: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  totalReportsText: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
-  totalReportsValue: { fontSize: 28, fontWeight: 800, color: C.white, lineHeight: 1 },
-  locationCard: {
-    background: C.white, border: '1px solid rgba(27,43,75,0.07)',
-    borderRadius: 12, padding: '20px', boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
-  },
-  locationHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 16, flexWrap: 'wrap', gap: 12,
-  },
-  locationTableHeader: {
-    display: 'grid', gridTemplateColumns: '40px 1fr 80px 100px',
-    padding: '10px 12px', background: C.pageBg, borderRadius: 8,
-    fontSize: 10.5, fontWeight: 700, color: C.mutedGray,
-    textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8,
-  },
-  locationRow: {
-    display: 'grid', gridTemplateColumns: '40px 1fr 80px 100px',
-    padding: '12px', borderBottom: '1px solid rgba(27,43,75,0.05)',
-    alignItems: 'center', transition: 'background 0.15s ease', cursor: 'pointer', borderRadius: 8,
-  },
-  locationRank: { fontSize: 13, fontWeight: 700, color: C.mutedGray },
-  locationName: { fontSize: 13, fontWeight: 600, color: C.navyDark },
-  locationReports: { fontSize: 13, fontWeight: 700, color: C.danger },
-  locationDetections: {
-    fontSize: 12, fontWeight: 600, color: C.accent,
-    background: `${C.accent}14`, padding: '4px 8px', borderRadius: 20,
-    textAlign: 'center', display: 'inline-block', width: 'fit-content',
-  },
-  locationMostActive: {
-    fontSize: 11, color: C.bodyGray, background: C.pageBg, padding: '6px 12px', borderRadius: 20,
-  },
-};
-
 // ==================== ICON COMPONENT ====================
 const Icon = ({ d, size = 18, color = 'currentColor', strokeWidth = 1.8 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -785,47 +210,56 @@ const Icon = ({ d, size = 18, color = 'currentColor', strokeWidth = 1.8 }) => (
 );
 
 const ICONS = {
-  dashboard:   "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
-  analytics:   "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
-  collection:  "M20 7h-4.18A3 3 0 0013 5h-2a3 3 0 00-2.82 2H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1z M12 11v4 M9 13h6",
-  map:         "M21 10.5c0 4.5-9 12-9 12s-9-7.5-9-12a9 9 0 0118 0z M12 13.5a3 3 0 100-6 3 3 0 000 6z",
-  history:     "M12 8v4l3 3 M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z",
-  waste:       ["M3 6h18", "M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6", "M10 11v6", "M14 11v6", "M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"],
-  messages:    ["M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z", "M22 6l-10 7L2 6"],
-  logout:      ["M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4", "M16 17l5-5-5-5", "M21 12H9"],
-  profile:     ["M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2", "M12 11a4 4 0 100-8 4 4 0 000 8z"],
-  leaf:        ["M6.5 7.5C5 10 4 14 8 18c4 4 8.5 2.5 10.5 0.5C20 16 21 12 17 8c-3-3-7-3-9-2", "M3 21l6-6"],
-  recycle:     ["M4 15l3 3 3-3", "M7 18V9.5C7 7 9 5 11.5 5H13", "M20 9l-3-3-3 3", "M17 6v8.5C17 17 15 19 12.5 19H11"],
-  alert:       ["M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z", "M12 9v4", "M12 17h.01"],
-  weight:      "M12 2v4M12 6l4 4-4 4-4-4 4-4z M4 12h16 M12 22v-4",
-  location:    "M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z M12 13a3 3 0 100-6 3 3 0 000 6z",
-  users:       ["M12 11a4 4 0 100-8 4 4 0 000 8z", "M18 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2", "M22 21v-2a4 4 0 00-3-3.87", "M16 3.13a4 4 0 010 7.75"],
-  megaphone:   "M3 11l19-9-9 19-2-8-8-2z",
-  calendar:    ["M8 2v4", "M16 2v4", "M3 10h18", "M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"],
-  broom:       ["M9 3l2 2", "M5 7l4-4 10 10-4 4z", "M6 18l-3 3", "M9 21l-3-3 8-8"],
-  newspaper:   ["M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 002 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2", "M18 14h-8", "M15 18h-5", "M10 6h8v4h-8V6z"],
-  siren:       ["M5 10.5V19a2 2 0 002 2h10a2 2 0 002-2v-8.5", "M12 2v2", "M4.93 4.93l1.41 1.41", "M19.07 4.93l-1.41 1.41", "M2 11h2", "M20 11h2", "M9 10a3 3 0 116 0v1H9v-1z"],
-  filetext:    ["M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z", "M14 2v6h6", "M16 13H8", "M16 17H8"],
-  pin:         ["M12 17v5", "M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"],
-  user:        ["M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2", "M12 11a4 4 0 100-8 4 4 0 000 8z"],
-  eye:         ["M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z", "M12 9a3 3 0 100 6 3 3 0 000-6z"],
-  heart:       "M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z",
-  comment:     "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
-  arrowRight:  "M5 12h14M12 5l7 7-7 7",
-  share:       ["M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8", "M16 6l-4-4-4 4", "M12 2v13"],
-  mapPin:      "M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z M12 13a3 3 0 100-6 3 3 0 000 6z",
-  building:    ["M3 21h18", "M5 21V7l8-4 8 4v14", "M9 21v-6h6v6"],
-  shield:      "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
-  trending:    ["M23 6l-9.5 9.5-5-5L1 18", "M17 6h6v6"],
-  trendingUp:  ["M23 6l-9.5 9.5-5-5L1 18", "M17 6h6v6"],
-  trendingDown:["M23 18l-9.5-9.5-5 5L1 6", "M17 18h6v-6"],
-  check:       ["M20 6L9 17l-5-5"],
-  layers:      ["M12 2L2 7l10 5 10-5-10-5z", "M2 17l10 5 10-5", "M2 12l10 5 10-5"],
-  barChart:    ["M18 20V10", "M12 20V4", "M6 20v-6"],
-  close:       ["M18 6L6 18", "M6 6l12 12"],
-  scan:        ["M3 9V5a2 2 0 012-2h4", "M3 15v4a2 2 0 002 2h4", "M21 9V5a2 2 0 00-2-2h-4", "M21 15v4a2 2 0 01-2 2h-4", "M8 12h8", "M12 8v8"],
-  chartPie:    ["M21.21 15.89A10 10 0 118 2.83", "M22 12A10 10 0 0012 2v10z"],
-  target:      "M12 22C6.48 22 2 17.52 2 12S6.48 2 12 2s10 4.48 10 10-4.48 10-10 10z M12 18a6 6 0 100-12 6 6 0 000 12z M12 14a2 2 0 100-4 2 2 0 000 4z",
+  dashboard:    "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
+  analytics:    "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+  collection:   "M20 7h-4.18A3 3 0 0013 5h-2a3 3 0 00-2.82 2H4a1 1 0 00-1 1v10a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1z M12 11v4 M9 13h6",
+  map:          "M21 10.5c0 4.5-9 12-9 12s-9-7.5-9-12a9 9 0 0118 0z M12 13.5a3 3 0 100-6 3 3 0 000 6z",
+  history:      "M12 8v4l3 3 M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z",
+  waste:        ["M3 6h18", "M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6", "M10 11v6", "M14 11v6", "M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"],
+  messages:     ["M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z", "M22 6l-10 7L2 6"],
+  logout:       ["M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4", "M16 17l5-5-5-5", "M21 12H9"],
+  profile:      ["M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2", "M12 11a4 4 0 100-8 4 4 0 000 8z"],
+  leaf:         ["M6.5 7.5C5 10 4 14 8 18c4 4 8.5 2.5 10.5 0.5C20 16 21 12 17 8c-3-3-7-3-9-2", "M3 21l6-6"],
+  recycle:      ["M4 15l3 3 3-3", "M7 18V9.5C7 7 9 5 11.5 5H13", "M20 9l-3-3-3 3", "M17 6v8.5C17 17 15 19 12.5 19H11"],
+  alert:        ["M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z", "M12 9v4", "M12 17h.01"],
+  weight:       "M12 2v4M12 6l4 4-4 4-4-4 4-4z M4 12h16 M12 22v-4",
+  location:     "M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z M12 13a3 3 0 100-6 3 3 0 000 6z",
+  users:        ["M12 11a4 4 0 100-8 4 4 0 000 8z", "M18 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2", "M22 21v-2a4 4 0 00-3-3.87", "M16 3.13a4 4 0 010 7.75"],
+  megaphone:    "M3 11l19-9-9 19-2-8-8-2z",
+  calendar:     ["M8 2v4", "M16 2v4", "M3 10h18", "M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"],
+  broom:        ["M9 3l2 2", "M5 7l4-4 10 10-4 4z", "M6 18l-3 3", "M9 21l-3-3 8-8"],
+  newspaper:    ["M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 002 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2", "M18 14h-8", "M15 18h-5", "M10 6h8v4h-8V6z"],
+  siren:        ["M5 10.5V19a2 2 0 002 2h10a2 2 0 002-2v-8.5", "M12 2v2", "M4.93 4.93l1.41 1.41", "M19.07 4.93l-1.41 1.41", "M2 11h2", "M20 11h2", "M9 10a3 3 0 116 0v1H9v-1z"],
+  filetext:     ["M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z", "M14 2v6h6", "M16 13H8", "M16 17H8"],
+  pin:          ["M12 17v5", "M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"],
+  user:         ["M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2", "M12 11a4 4 0 100-8 4 4 0 000 8z"],
+  eye:          ["M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z", "M12 9a3 3 0 100 6 3 3 0 000-6z"],
+  heart:        "M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z",
+  comment:      "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
+  arrowRight:   "M5 12h14M12 5l7 7-7 7",
+  share:        ["M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8", "M16 6l-4-4-4 4", "M12 2v13"],
+  mapPin:       "M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z M12 13a3 3 0 100-6 3 3 0 000 6z",
+  building:     ["M3 21h18", "M5 21V7l8-4 8 4v14", "M9 21v-6h6v6"],
+  shield:       "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  trending:     ["M23 6l-9.5 9.5-5-5L1 18", "M17 6h6v6"],
+  trendingUp:   ["M23 6l-9.5 9.5-5-5L1 18", "M17 6h6v6"],
+  trendingDown: ["M23 18l-9.5-9.5-5 5L1 6", "M17 18h6v-6"],
+  check:        ["M20 6L9 17l-5-5"],
+  layers:       ["M12 2L2 7l10 5 10-5-10-5z", "M2 17l10 5 10-5", "M2 12l10 5 10-5"],
+  barChart:     ["M18 20V10", "M12 20V4", "M6 20v-6"],
+  close:        ["M18 6L6 18", "M6 6l12 12"],
+  scan:         ["M3 9V5a2 2 0 012-2h4", "M3 15v4a2 2 0 002 2h4", "M21 9V5a2 2 0 00-2-2h-4", "M21 15v4a2 2 0 01-2 2h-4", "M8 12h8", "M12 8v8"],
+  chartPie:     ["M21.21 15.89A10 10 0 118 2.83", "M22 12A10 10 0 0012 2v10z"],
+  target:       "M12 22C6.48 22 2 17.52 2 12S6.48 2 12 2s10 4.48 10 10-4.48 10-10 10z M12 18a6 6 0 100-12 6 6 0 000 12z M12 14a2 2 0 100-4 2 2 0 000 4z",
+  activity:     "M22 12h-4l-3 9L9 3l-3 9H2",
+  grid:         ["M3 3h7v7H3z", "M14 3h7v7h-7z", "M14 14h7v7h-7z", "M3 14h7v7H3z"],
+  male:         ["M10 14a4 4 0 100-8 4 4 0 000 8z", "M21 3l-6 6", "M15 3h6v6"],
+  female:       ["M12 14a4 4 0 100-8 4 4 0 000 8z", "M12 14v7", "M9 18h6"],
+  userCheck:    ["M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2", "M8.5 11a4 4 0 100-8 4 4 0 000 8z", "M17 11l2 2 4-4"],
+  userX:        ["M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2", "M8.5 11a4 4 0 100-8 4 4 0 000 8z", "M18 8l4 4m0-4l-4 4"],
+  package:      ["M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z", "M3.27 6.96L12 12.01l8.73-5.05", "M12 22.08V12"],
+  flame:        "M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z",
+  droplets:     ["M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z", "M12.56 6.6A10.97 10.97 0 0014 3.02c.5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3 1.05 1.23 2.22 2.05 3.56 2.08z"],
 };
 
 const CATEGORY_ICONS = {
@@ -847,29 +281,586 @@ const ADMIN_ROLE_ICONS = {
 };
 
 const CHART_COLORS = [
-  '#4FC3F7', '#1B2B4B', '#4CAF50', '#FF9800',
-  '#F44336', '#9C27B0', '#00BCD4', '#FF5722',
-  '#607D8B', '#795548',
+  '#4FC3F7', '#1B2B4B', '#4CAF50', '#F59E0B',
+  '#EF4444', '#8B5CF6', '#06B6D4', '#F97316',
+  '#64748B', '#78716C',
 ];
 
+// ==================== STYLES ====================
+const S = {
+  root: {
+    display: 'flex', minHeight: '100vh',
+    background: C.pageBg,
+    fontFamily: "'Inter', 'DM Sans', 'Segoe UI', sans-serif",
+    color: C.navyDark,
+  },
+  sidebar: {
+    width: 248, minHeight: '100vh',
+    background: C.deepDark,
+    display: 'flex', flexDirection: 'column',
+    position: 'fixed', top: 0, left: 0, bottom: 0,
+    zIndex: 100,
+    boxShadow: '4px 0 32px rgba(15,30,56,0.28)',
+  },
+  sidebarHeader: {
+    padding: '20px 16px 16px',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
+  },
+  logoWrap: { display: 'flex', alignItems: 'center', gap: 10 },
+  logoImg: {
+    width: 36, height: 36, objectFit: 'contain', borderRadius: 8,
+    background: 'rgba(255,255,255,0.06)', padding: 4,
+    border: '1px solid rgba(79,195,247,0.18)', flexShrink: 0,
+  },
+  logoTitle: {
+    fontSize: 12.5, fontWeight: 700, color: C.cardBg,
+    letterSpacing: '0.06em', lineHeight: 1.2, textTransform: 'uppercase',
+  },
+  logoSub: {
+    fontSize: 9, color: C.accent, marginTop: 3,
+    letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.85,
+  },
+  nav: { flex: 1, padding: '12px 8px', overflowY: 'auto' },
+  navSection: { marginBottom: 18 },
+  navSectionLabel: {
+    fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',
+    textTransform: 'uppercase', color: 'rgba(255,255,255,0.2)',
+    padding: '0 10px', marginBottom: 4,
+  },
+  navItem: (active) => ({
+    display: 'flex', alignItems: 'center', gap: 9,
+    padding: '7px 10px', borderRadius: 7, cursor: 'pointer',
+    fontSize: 12.5, fontWeight: active ? 600 : 400,
+    color: active ? C.cardBg : 'rgba(255,255,255,0.45)',
+    background: active ? 'rgba(79,195,247,0.12)' : 'transparent',
+    borderLeft: active ? `2px solid ${C.accent}` : '2px solid transparent',
+    transition: 'all 0.15s ease',
+    marginBottom: 1, userSelect: 'none',
+  }),
+  sidebarFooter: {
+    padding: '10px 8px',
+    borderTop: '1px solid rgba(255,255,255,0.06)',
+  },
+  adminMini: {
+    display: 'flex', alignItems: 'center', gap: 9,
+    padding: '9px 10px', borderRadius: 8, marginBottom: 8,
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.06)',
+    cursor: 'pointer', transition: 'background 0.15s',
+  },
+  avatar: {
+    width: 32, height: 32, borderRadius: 8,
+    background: 'rgba(79,195,247,0.14)',
+    border: '1px solid rgba(79,195,247,0.25)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 12, fontWeight: 600, color: C.accent,
+    flexShrink: 0, overflow: 'hidden',
+  },
+  adminName: { fontSize: 12, fontWeight: 600, color: C.cardBg },
+  adminRole: { fontSize: 9.5, color: 'rgba(255,255,255,0.32)', marginTop: 2 },
+  logoutBtn: {
+    width: '100%', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', gap: 7, padding: '8px 10px',
+    borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)',
+    background: 'rgba(239,68,68,0.07)', color: '#ff5c5e',
+    fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+    transition: 'all 0.15s ease', fontFamily: "'Inter', 'DM Sans', sans-serif",
+    letterSpacing: '0.05em', textTransform: 'uppercase',
+  },
+  main: { marginLeft: 248, flex: 1, minHeight: '100vh', background: C.pageBg },
+  topbar: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '14px 28px', borderBottom: `1px solid ${C.border}`,
+    background: C.cardBg, position: 'sticky', top: 0, zIndex: 50,
+    boxShadow: '0 1px 8px rgba(27,43,75,0.06)',
+  },
+  pageTitle: {
+    fontSize: 17, fontWeight: 700, color: C.navyDark,
+    margin: 0, letterSpacing: '-0.01em', lineHeight: 1.25,
+  },
+  pageSub: { fontSize: 11.5, color: C.bodyGray, margin: '2px 0 0' },
+  dateChip: {
+    fontSize: 11.5, color: C.bodyGray, background: C.pageBg,
+    border: `1px solid ${C.border}`, borderRadius: 7,
+    padding: '5px 12px', fontWeight: 500,
+    display: 'flex', alignItems: 'center', gap: 6,
+  },
+  content: { padding: '22px 28px' },
+
+  // ---- STAT CARDS ----
+  statsGrid: {
+    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: 14, marginBottom: 22,
+  },
+  statCard: {
+    background: C.cardBg, border: `1px solid ${C.border}`,
+    borderRadius: 12, overflow: 'hidden', position: 'relative',
+    transition: 'box-shadow 0.2s, transform 0.18s', cursor: 'pointer',
+    boxShadow: '0 1px 4px rgba(27,43,75,0.04)', display: 'flex', flexDirection: 'column',
+  },
+  statCardAccent: (color) => ({ height: 3, width: '100%', background: color, flexShrink: 0 }),
+  statCardBody: { padding: '14px 16px 10px', display: 'flex', flexDirection: 'column', flex: 1 },
+  statCardTop: {
+    display: 'flex', alignItems: 'flex-start',
+    justifyContent: 'space-between', marginBottom: 10,
+  },
+  statIconBox: (color) => ({
+    width: 34, height: 34, borderRadius: 9,
+    background: color + '18', border: '1px solid ' + color + '30',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  }),
+  statTrendBadge: (positive) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 3,
+    fontSize: 10, fontWeight: 700,
+    color: positive ? C.success : C.danger,
+    background: positive ? 'rgba(76,175,80,0.12)' : 'rgba(239,68,68,0.12)',
+    padding: '3px 7px', borderRadius: 20,
+  }),
+  statLabel: {
+    fontSize: 9.5, color: C.bodyGray, fontWeight: 600,
+    marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.07em',
+  },
+  statValue: { fontSize: 24, fontWeight: 800, color: C.navyDark, lineHeight: 1, letterSpacing: '-0.02em' },
+  statSub: { fontSize: 10, color: C.mutedGray, marginTop: 4, marginBottom: 0 },
+  sparklineWrap: { height: 52, marginTop: 8, overflow: 'hidden' },
+
+  // ---- DASHBOARD LAYOUT ----
+  dashboardColumns: {
+    display: 'grid', gridTemplateColumns: '1fr 340px',
+    gap: 16, alignItems: 'start',
+  },
+  chartsPanel: { display: 'flex', flexDirection: 'column', gap: 14 },
+  chartRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 },
+
+  // ---- CHART CARDS ----
+  chartCard: {
+    background: C.cardBg, border: `1px solid ${C.border}`,
+    borderRadius: 12, padding: '16px 18px',
+    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
+  },
+  chartCardHeader: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  chartCardTitle: {
+    fontSize: 12.5, fontWeight: 700, color: C.navyDark,
+    margin: 0, display: 'flex', alignItems: 'center', gap: 7,
+  },
+  chartDot: (color) => ({
+    width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0,
+  }),
+  chartContainer: { height: 210 },
+  chartContainerTall: { height: 250 },
+
+  // ---- FEED PANEL ----
+  feedPanel: {
+    display: 'flex', flexDirection: 'column',
+    background: C.cardBg, border: `1px solid ${C.border}`,
+    borderRadius: 12, overflow: 'hidden',
+    position: 'sticky', top: 74,
+    maxHeight: 'calc(100vh - 92px)',
+    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
+  },
+  feedStickyHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '13px 14px 10px',
+    borderBottom: `1px solid ${C.border}`,
+    background: C.cardBg, flexShrink: 0,
+  },
+  feedScrollArea: { overflowY: 'auto', flex: 1, padding: '10px' },
+  feedTitle: {
+    fontSize: 13, fontWeight: 700, color: C.navyDark, margin: 0,
+    display: 'flex', alignItems: 'center', gap: 6,
+  },
+  viewAllLink: {
+    color: C.accentDeep, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '4px 9px', borderRadius: 6,
+    background: 'rgba(79,195,247,0.08)', border: '1px solid rgba(79,195,247,0.2)',
+    transition: 'all 0.15s', textDecoration: 'none',
+  },
+  postCard: {
+    background: C.cardBg, border: `1px solid ${C.border}`,
+    borderRadius: 10, marginBottom: 8, overflow: 'hidden',
+    boxShadow: '0 1px 3px rgba(27,43,75,0.04)', transition: 'box-shadow 0.15s',
+  },
+  postCardHeader: {
+    display: 'flex', alignItems: 'flex-start', gap: 9, padding: '11px 12px 7px',
+  },
+  postAvatar: {
+    width: 38, height: 38, borderRadius: '50%',
+    background: C.navyMid,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 12, fontWeight: 700, color: C.cardBg,
+    flexShrink: 0, overflow: 'hidden',
+  },
+  postAuthorName: { fontSize: 12.5, fontWeight: 700, color: C.navyDark, margin: 0 },
+  postAuthorMeta: { display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, flexWrap: 'wrap' },
+  postBody: { padding: '0 12px 9px' },
+  postTitle: { fontSize: 12.5, fontWeight: 700, color: C.navyDark, margin: '0 0 3px' },
+  postExcerpt: { fontSize: 11.5, color: C.bodyGray, lineHeight: 1.6, margin: 0 },
+  seeMore: {
+    color: C.accentDeep, cursor: 'pointer', fontSize: 11.5,
+    fontWeight: 600, marginTop: 3, display: 'inline-block',
+  },
+  postImage: { width: '100%', display: 'block', maxHeight: 180, objectFit: 'cover' },
+  postFooter: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '6px 12px', borderTop: `1px solid rgba(27,43,75,0.05)`,
+    fontSize: 10.5, color: C.mutedGray,
+  },
+  postStat: { display: 'flex', alignItems: 'center', gap: 3 },
+  postActions: { display: 'flex', borderTop: `1px solid rgba(27,43,75,0.05)` },
+  postActionBtn: {
+    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    gap: 5, padding: '7px 0', fontSize: 11, fontWeight: 600, color: C.bodyGray,
+    cursor: 'pointer', background: 'none', border: 'none',
+    borderRight: `1px solid rgba(27,43,75,0.05)`,
+    fontFamily: "'Inter', 'DM Sans', sans-serif", transition: 'background 0.15s',
+  },
+  feedEmpty: {
+    background: C.cardBg, border: `1px solid ${C.border}`,
+    borderRadius: 10, textAlign: 'center', padding: '36px 20px', color: C.mutedGray,
+  },
+
+  // ---- SECTION HEADING ----
+  sectionHeading: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    marginBottom: 14, marginTop: 0,
+  },
+  sectionHeadingText: {
+    fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+    textTransform: 'uppercase', color: C.mutedGray, whiteSpace: 'nowrap',
+  },
+  sectionHeadingLine: { flex: 1, height: 1, background: C.border },
+
+  // ---- ANALYTICS PAGE ----
+  analyticsPage: { display: 'flex', flexDirection: 'column', gap: 20 },
+
+  // Metric summary row
+  metricRow: {
+    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14,
+  },
+  metricCard: {
+    background: C.cardBg, border: `1px solid ${C.border}`,
+    borderRadius: 12, padding: '16px 18px',
+    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
+    display: 'flex', flexDirection: 'column', gap: 10,
+  },
+  metricCardTop: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  },
+  metricIconWrap: (color) => ({
+    width: 36, height: 36, borderRadius: 10,
+    background: color + '15', border: '1px solid ' + color + '28',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  }),
+  metricValue: {
+    fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1,
+    color: C.navyDark,
+  },
+  metricLabel: {
+    fontSize: 11, fontWeight: 600, color: C.bodyGray,
+    textTransform: 'uppercase', letterSpacing: '0.07em',
+  },
+  metricSub: { fontSize: 11, color: C.mutedGray, marginTop: 2 },
+  metricBar: (color, pct) => ({
+    height: 3, borderRadius: 2,
+    background: `linear-gradient(to right, ${color} ${pct}%, rgba(27,43,75,0.08) ${pct}%)`,
+  }),
+
+  // Chart grid
+  analyticsChartGrid: {
+    display: 'grid', gridTemplateColumns: '5fr 4fr', gap: 14,
+  },
+  analyticsChartGridEqual: {
+    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14,
+  },
+  analyticsChartGridThree: {
+    display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14,
+  },
+
+  // User analytics panel
+  userPanel: {
+    background: C.cardBg, border: `1px solid ${C.border}`,
+    borderRadius: 12, overflow: 'hidden',
+    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
+  },
+  userPanelHeader: {
+    padding: '14px 20px',
+    borderBottom: `1px solid ${C.border}`,
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  },
+  userPanelBody: {
+    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0,
+  },
+  userPanelLeft: {
+    padding: '20px', borderRight: `1px solid ${C.border}`,
+  },
+  userPanelRight: {
+    padding: '20px',
+  },
+  userStatBlock: {
+    marginBottom: 20,
+  },
+  userStatBlockLabel: {
+    fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+    textTransform: 'uppercase', color: C.mutedGray, marginBottom: 12,
+    display: 'flex', alignItems: 'center', gap: 6,
+  },
+  userStatRow: {
+    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14,
+  },
+  userStatItem: {
+    background: C.pageBg, borderRadius: 10, padding: '12px 14px',
+    border: `1px solid ${C.border}`,
+  },
+  userStatNum: (color) => ({
+    fontSize: 22, fontWeight: 800, color, lineHeight: 1, marginBottom: 4,
+  }),
+  userStatLabel: {
+    fontSize: 10.5, color: C.bodyGray, fontWeight: 500,
+  },
+  ratioBar: {
+    height: 6, borderRadius: 4,
+    background: 'rgba(27,43,75,0.06)',
+    overflow: 'hidden', marginTop: 8,
+  },
+  ratioFill: (color, pct) => ({
+    height: '100%', width: `${pct}%`,
+    background: color, borderRadius: 4,
+    transition: 'width 0.6s ease',
+  }),
+  ratioLabel: {
+    display: 'flex', justifyContent: 'space-between',
+    fontSize: 10.5, color: C.mutedGray, marginTop: 5,
+  },
+
+  // Status summary strip
+  statusStrip: {
+    background: `linear-gradient(135deg, ${C.deepDark} 0%, ${C.navyMid} 100%)`,
+    borderRadius: 12, padding: '20px 24px',
+    boxShadow: '0 4px 20px rgba(15,30,56,0.15)',
+  },
+  statusStripInner: {
+    display: 'grid', gridTemplateColumns: 'auto 1fr auto',
+    gap: 32, alignItems: 'center',
+  },
+  weightCircle: {
+    width: 88, height: 88, borderRadius: '50%',
+    border: `2.5px solid ${C.accent}`,
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    background: 'rgba(79,195,247,0.07)', flexShrink: 0,
+  },
+  weightNum: { fontSize: 22, fontWeight: 900, color: C.accent, lineHeight: 1, letterSpacing: '-0.02em' },
+  weightUnit: { fontSize: 11, fontWeight: 600, color: C.accent, opacity: 0.7, marginTop: 2 },
+  statusBarsWrap: { display: 'flex', flexDirection: 'column', gap: 10 },
+  statusBarRow: {},
+  statusBarMeta: { display: 'flex', justifyContent: 'space-between', marginBottom: 4 },
+  statusBarKey: { fontSize: 10.5, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.03em', fontWeight: 500 },
+  statusBarVal: { fontSize: 10.5, fontWeight: 700, color: C.cardBg },
+  statusBarTrack: { height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' },
+  statusBarFill: (color, pct) => ({
+    height: '100%', width: `${pct}%`, background: color, borderRadius: 3, transition: 'width 0.6s ease',
+  }),
+  statusStripRight: { textAlign: 'right', flexShrink: 0 },
+  stripTotalLabel: { fontSize: 10.5, color: 'rgba(255,255,255,0.35)', marginBottom: 4 },
+  stripTotalValue: { fontSize: 32, fontWeight: 900, color: C.cardBg, lineHeight: 1, letterSpacing: '-0.03em' },
+  stripSubLabel: { fontSize: 10.5, color: 'rgba(255,255,255,0.3)', marginTop: 4 },
+
+  // Location panel
+  locationPanel: {
+    background: C.cardBg, border: `1px solid ${C.border}`,
+    borderRadius: 12, overflow: 'hidden',
+    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
+  },
+  locationPanelHeader: {
+    padding: '14px 20px', borderBottom: `1px solid ${C.border}`,
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    background: C.cardBg,
+  },
+  locationTableHead: {
+    display: 'grid', gridTemplateColumns: '36px 1fr 80px 96px',
+    padding: '9px 16px', background: C.pageBg,
+    fontSize: 9.5, fontWeight: 700, color: C.mutedGray,
+    textTransform: 'uppercase', letterSpacing: '0.07em',
+    borderBottom: `1px solid ${C.border}`,
+  },
+  locationTableRow: {
+    display: 'grid', gridTemplateColumns: '36px 1fr 80px 96px',
+    padding: '11px 16px', borderBottom: `1px solid rgba(27,43,75,0.04)`,
+    alignItems: 'center', cursor: 'pointer',
+    transition: 'background 0.15s',
+  },
+  locationRank: { fontSize: 12, fontWeight: 700, color: C.mutedGray },
+  locationName: { fontSize: 12.5, fontWeight: 600, color: C.navyDark },
+  locationReports: { fontSize: 13, fontWeight: 700, color: C.danger, textAlign: 'center' },
+  locationDetectionPill: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 11, fontWeight: 700, color: C.accentDeep,
+    background: `${C.accent}18`, padding: '3px 10px', borderRadius: 20,
+  },
+  locationTableFoot: {
+    display: 'flex', justifyContent: 'space-between',
+    padding: '10px 16px', borderTop: `1px solid ${C.border}`,
+    fontSize: 11, color: C.mutedGray,
+  },
+
+  // Scanned items list
+  scannedItem: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '8px 0', borderBottom: `1px solid rgba(27,43,75,0.05)`,
+  },
+  scannedRank: { width: 22, fontSize: 10.5, fontWeight: 700, color: C.mutedGray, flexShrink: 0 },
+  scannedLabel: { flex: 1, fontSize: 12.5, fontWeight: 500, color: C.navyDark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  scannedCount: (color) => ({
+    fontSize: 10.5, fontWeight: 700, color: C.cardBg, background: color,
+    padding: '2px 9px', borderRadius: 20, flexShrink: 0,
+  }),
+
+  // Map page
+  mapContainer: {
+    background: C.cardBg, border: `1px solid ${C.border}`,
+    borderRadius: 12, minHeight: 500, overflow: 'hidden', position: 'relative',
+    boxShadow: '0 1px 4px rgba(27,43,75,0.04)',
+  },
+  mapLegend: {
+    position: 'absolute', bottom: 20, right: 20,
+    background: 'rgba(255,255,255,0.97)', padding: '12px 16px',
+    borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+    zIndex: 1000, fontSize: 12, border: `1px solid ${C.border}`,
+  },
+  mapLegendTitle: { fontWeight: 700, marginBottom: 8, color: C.navyDark, fontSize: 11 },
+  legendGradient: {
+    width: 180, height: 8,
+    background: 'linear-gradient(to right, #00ff00, #ffff00, #ff0000)',
+    borderRadius: 6, marginBottom: 6,
+  },
+  legendLabels: { display: 'flex', justifyContent: 'space-between', fontSize: 10, color: C.bodyGray },
+  mapControls: { position: 'absolute', top: 20, right: 20, zIndex: 1000, display: 'flex', gap: 8 },
+  mapControlBtn: {
+    background: C.cardBg, border: `1px solid ${C.border}`,
+    borderRadius: 6, padding: '6px 11px', cursor: 'pointer',
+    fontSize: 11.5, fontWeight: 500, color: C.navyDark, transition: 'all 0.15s',
+    display: 'flex', alignItems: 'center', gap: 6,
+  },
+  mapInfo: {
+    position: 'absolute', bottom: 20, left: 20,
+    background: 'rgba(255,255,255,0.97)', padding: '6px 11px',
+    borderRadius: 6, fontSize: 10.5, color: C.bodyGray,
+    zIndex: 1000, border: `1px solid ${C.border}`,
+    display: 'flex', alignItems: 'center', gap: 5,
+  },
+  locationRanking: {
+    position: 'absolute', top: 20, left: 20,
+    background: 'rgba(255,255,255,0.97)', padding: '12px 16px',
+    borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+    zIndex: 1000, fontSize: 12, border: `1px solid ${C.border}`, maxWidth: 240,
+  },
+  locationRankingTitle: {
+    fontWeight: 700, marginBottom: 8, color: C.navyDark, fontSize: 11,
+    borderBottom: `1px solid ${C.border}`, paddingBottom: 6,
+    display: 'flex', alignItems: 'center', gap: 6,
+  },
+  rankingItem: { display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 11, alignItems: 'center' },
+  rankingName: { fontWeight: 500, color: C.bodyGray },
+  rankingBadge: {
+    color: C.cardBg, fontWeight: 700, fontSize: 10,
+    background: C.danger, borderRadius: 4, padding: '1px 6px',
+  },
+
+  // Modals
+  postModal: {
+    position: 'fixed', inset: 0, background: 'rgba(15,30,56,0.65)',
+    backdropFilter: 'blur(4px)', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16,
+  },
+  postModalBox: {
+    background: C.cardBg, borderRadius: 16,
+    width: '100%', maxWidth: 520, maxHeight: '88vh',
+    overflow: 'hidden', display: 'flex', flexDirection: 'column',
+    border: `1px solid rgba(27,43,75,0.1)`,
+    boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
+  },
+  postModalHeader: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '14px 18px', borderBottom: `1px solid ${C.border}`, flexShrink: 0,
+  },
+  postModalBody: { overflowY: 'auto', flex: 1 },
+  postModalCloseBtn: {
+    width: 28, height: 28, borderRadius: '50%',
+    background: C.pageBg, border: `1px solid ${C.border}`,
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 14, color: C.bodyGray,
+  },
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(15,30,56,0.7)',
+    backdropFilter: 'blur(4px)', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+  },
+  modal: {
+    background: C.cardBg, border: `1px solid rgba(27,43,75,0.1)`,
+    borderRadius: 14, padding: 28, width: 460, maxWidth: '90vw',
+    boxShadow: '0 24px 64px rgba(0,0,0,0.16)',
+  },
+  modalTitle: { fontSize: 17, fontWeight: 700, color: C.navyDark, marginBottom: 10, marginTop: 0 },
+  modalDesc: { fontSize: 13, color: C.bodyGray, lineHeight: 1.7, marginBottom: 22 },
+  modalActions: { display: 'flex', gap: 10, justifyContent: 'flex-end' },
+  btnSecondary: {
+    padding: '8px 16px', borderRadius: 7,
+    border: `1px solid ${C.border}`, background: 'transparent',
+    color: C.bodyGray, fontSize: 12.5, fontWeight: 600,
+    cursor: 'pointer', fontFamily: "'Inter', 'DM Sans', sans-serif",
+  },
+  btnDanger: {
+    padding: '8px 16px', borderRadius: 7, border: 'none',
+    background: C.danger, color: C.cardBg, fontSize: 12.5, fontWeight: 700,
+    cursor: 'pointer', fontFamily: "'Inter', 'DM Sans', sans-serif",
+    display: 'flex', alignItems: 'center', gap: 7,
+  },
+  errorBar: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    background: '#FEF2F2', border: '1px solid #FECACA',
+    borderRadius: 8, padding: '10px 16px',
+    margin: '0 28px 16px', fontSize: 12.5, color: C.danger,
+  },
+  errClose: {
+    marginLeft: 'auto', background: 'none', border: 'none',
+    color: C.danger, cursor: 'pointer', fontSize: 16, lineHeight: 1,
+  },
+
+  // Status badge
+  statusBadge: (status) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px',
+    borderRadius: 5, fontSize: 11, fontWeight: 600,
+    background:
+      status === 'completed' || status === 'recycled' ? C.successBg :
+      status === 'pending' ? C.warningBg : C.dangerBg,
+    color:
+      status === 'completed' || status === 'recycled' ? C.success :
+      status === 'pending' ? C.warning : C.danger,
+  }),
+};
+
+// ==================== SECTION HEADING ====================
 const SectionHeading = ({ children }) => (
-  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.11em', textTransform: 'uppercase', color: '#90A4AE', marginBottom: 14, marginTop: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-    <span>{children}</span>
-    <div style={{ flex: 1, height: 1, background: 'rgba(27,43,75,0.08)' }} />
+  <div style={S.sectionHeading}>
+    <span style={S.sectionHeadingText}>{children}</span>
+    <div style={S.sectionHeadingLine} />
   </div>
 );
 
-// ==================== SPARKLINE COMPONENT ====================
+// ==================== SPARKLINE ====================
 const Sparkline = ({ data = [], color = '#4FC3F7' }) => {
   const canvasRef = useRef(null);
   const chartRef  = useRef(null);
-
   useEffect(() => {
     if (!canvasRef.current || !data.length) return;
     if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
     const ctx = canvasRef.current.getContext('2d');
-    const grad = ctx.createLinearGradient(0, 0, 0, 56);
-    grad.addColorStop(0, color + '45');
+    const grad = ctx.createLinearGradient(0, 0, 0, 52);
+    grad.addColorStop(0, color + '40');
     grad.addColorStop(1, color + '00');
     chartRef.current = new ChartJS(ctx, {
       type: 'line',
@@ -877,7 +868,7 @@ const Sparkline = ({ data = [], color = '#4FC3F7' }) => {
         labels: data.map((_, i) => i),
         datasets: [{
           data, borderColor: color, backgroundColor: grad,
-          fill: true, tension: 0.42, borderWidth: 2,
+          fill: true, tension: 0.42, borderWidth: 1.5,
           pointRadius: 0, pointHoverRadius: 0,
         }],
       },
@@ -885,26 +876,25 @@ const Sparkline = ({ data = [], color = '#4FC3F7' }) => {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { enabled: false } },
         scales: { x: { display: false }, y: { display: false } },
-        layout: { padding: { top: 2, bottom: 2, left: 0, right: 0 } },
+        layout: { padding: { top: 2, bottom: 2 } },
       },
     });
     return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
   }, [data, color]);
-
-  return <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '56px' }} />;
+  return <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '52px' }} />;
 };
 
-// ==================== STAT CARD COMPONENT ====================
+// ==================== STAT CARD ====================
 const StatCard = ({ label, value, sub, color, iconPath, trendUp, trendPct, sparkData, onClick }) => (
   <div style={S.statCard} onClick={onClick}
-    onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 28px rgba(27,43,75,0.13)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+    onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 24px rgba(27,43,75,0.12)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
     onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 4px rgba(27,43,75,0.04)'; e.currentTarget.style.transform = 'none'; }}>
     <div style={S.statCardAccent(color)} />
     <div style={S.statCardBody}>
       <div style={S.statCardTop}>
-        <div style={S.statIconBox(color)}><Icon d={iconPath} size={17} color={color} strokeWidth={2} /></div>
+        <div style={S.statIconBox(color)}><Icon d={iconPath} size={16} color={color} strokeWidth={2} /></div>
         <div style={S.statTrendBadge(trendUp)}>
-          <Icon d={trendUp ? ICONS.trendingUp : ICONS.trendingDown} size={11} color={trendUp ? C.success : C.danger} strokeWidth={2.5} />
+          <Icon d={trendUp ? ICONS.trendingUp : ICONS.trendingDown} size={10} color={trendUp ? C.success : C.danger} strokeWidth={2.5} />
           {trendPct}
         </div>
       </div>
@@ -916,7 +906,24 @@ const StatCard = ({ label, value, sub, color, iconPath, trendUp, trendPct, spark
   </div>
 );
 
-// ==================== WASTE HEATMAP COMPONENT ====================
+// ==================== METRIC CARD ====================
+const MetricCard = ({ label, value, sub, color, iconPath, barPct }) => (
+  <div style={S.metricCard}>
+    <div style={S.metricCardTop}>
+      <div>
+        <div style={S.metricLabel}>{label}</div>
+        <div style={{ ...S.metricValue, color }}>{value}</div>
+        {sub && <div style={S.metricSub}>{sub}</div>}
+      </div>
+      <div style={S.metricIconWrap(color)}>
+        <Icon d={iconPath} size={18} color={color} strokeWidth={2} />
+      </div>
+    </div>
+    {barPct !== undefined && <div style={S.metricBar(color, barPct)} />}
+  </div>
+);
+
+// ==================== WASTE HEATMAP ====================
 const WasteHeatmap = ({ locations, topLocations, onLocationClick, adminRole }) => {
   const mapRef = useRef(null);
   const heatmapRef = useRef(null);
@@ -954,7 +961,7 @@ const WasteHeatmap = ({ locations, topLocations, onLocationClick, adminRole }) =
     topLocations.slice(0, 10).forEach((loc, idx) => {
       const marker = L.circleMarker([loc.lat, loc.lng], {
         radius: 8 + (idx < 3 ? 4 : 0), fillColor: C.danger,
-        color: C.white, weight: 2, opacity: 1, fillOpacity: 0.9
+        color: C.cardBg, weight: 2, opacity: 1, fillOpacity: 0.9
       }).addTo(mapRef.current);
       marker.bindPopup(`
         <div style="font-family:'Inter','DM Sans',sans-serif;min-width:160px;padding:4px 0;">
@@ -979,7 +986,7 @@ const WasteHeatmap = ({ locations, topLocations, onLocationClick, adminRole }) =
   return <div id="waste-map" style={{ height: '500px', width: '100%', borderRadius: '12px' }} />;
 };
 
-// ==================== MAIN ADMIN DASHBOARD COMPONENT ====================
+// ==================== MAIN COMPONENT ====================
 const AdminDashboard = () => {
   const [admin, setAdmin] = useState(null);
   const [adminRole, setAdminRole] = useState(null);
@@ -989,8 +996,8 @@ const AdminDashboard = () => {
   const [error, setError] = useState(null);
   const [dashboardStats, setDashboardStats] = useState({
     totalReports: 0, pendingReports: 0, recycledReports: 0,
-    processedReports: 0, disposedReports: 0, totalMessages: 0,
-    unreadMessages: 0, weeklyGrowth: 0, totalWeight: 0,
+    processedReports: 0, disposedReports: 0,
+    totalMessages: 0, unreadMessages: 0, weeklyGrowth: 0, totalWeight: 0,
   });
   const [classificationData, setClassificationData] = useState({});
   const [collectionData, setCollectionData] = useState([]);
@@ -1006,9 +1013,9 @@ const AdminDashboard = () => {
     maleUsers: 0, femaleUsers: 0, usersThisMonth: 0, usersThisWeek: 0,
   });
   const [locationDetections, setLocationDetections] = useState([]);
-  const [sparkReports, setSparkReports] = useState(Array(14).fill(0));
-  const [sparkWeight, setSparkWeight] = useState(Array(14).fill(0));
-  const [sparkUsers, setSparkUsers] = useState(Array(14).fill(0));
+  const [sparkReports, setSparkReports]   = useState(Array(14).fill(0));
+  const [sparkWeight, setSparkWeight]     = useState(Array(14).fill(0));
+  const [sparkUsers, setSparkUsers]       = useState(Array(14).fill(0));
   const [sparkLocations, setSparkLocations] = useState(Array(14).fill(0));
 
   const navigate = useNavigate();
@@ -1131,24 +1138,19 @@ const AdminDashboard = () => {
       if (role === 'southadmin')   wasteReports = wasteReports.filter(r => r.assignedBarangay === 'south_signal');
       if (role === 'centraladmin') wasteReports = wasteReports.filter(r => r.assignedBarangay === 'central_signal');
 
-      // Calculate weight using scientific method
       let totalWeight = 0;
       wasteReports.forEach(r => { totalWeight += calculateTotalWeight(r); });
 
-      const totalReports = wasteReports.length;
-      const pendingReports   = wasteReports.filter(r => r.status === 'pending').length;
-      const recycledReports  = wasteReports.filter(r => r.status === 'recycled').length;
-      const processedReports = wasteReports.filter(r => r.status === 'processed').length;
-      const disposedReports  = wasteReports.filter(r => r.status === 'disposed').length;
+      const totalReports    = wasteReports.length;
+      const pendingReports  = wasteReports.filter(r => r.status === 'pending').length;
+      const recycledReports = wasteReports.filter(r => r.status === 'recycled').length;
+      const processedReports= wasteReports.filter(r => r.status === 'processed').length;
+      const disposedReports = wasteReports.filter(r => r.status === 'disposed').length;
 
       const lastWeek = wasteReports.filter(r => ((now - new Date(r.scanDate || r.createdAt)) / 86400000) <= 7).length;
       const prevWeek = wasteReports.filter(r => { const d = (now - new Date(r.scanDate || r.createdAt)) / 86400000; return d > 7 && d <= 14; }).length;
       const weeklyGrowth = prevWeek > 0 ? ((lastWeek - prevWeek) / prevWeek) * 100 : lastWeek > 0 ? 100 : 0;
-      setDashboardStats({ 
-        totalReports, pendingReports, recycledReports, processedReports, disposedReports, 
-        totalMessages: 0, unreadMessages: 0, weeklyGrowth, 
-        totalWeight: totalWeight.toFixed(2) 
-      });
+      setDashboardStats({ totalReports, pendingReports, recycledReports, processedReports, disposedReports, totalMessages: 0, unreadMessages: 0, weeklyGrowth, totalWeight: totalWeight.toFixed(2) });
 
       const classification = {};
       wasteReports.forEach(r => { const t = r.classification || 'Unknown'; classification[t] = (classification[t] || 0) + 1; });
@@ -1194,7 +1196,8 @@ const AdminDashboard = () => {
       wasteReports.forEach(r => {
         const dk = new Date(r.scanDate || r.createdAt).toISOString().split('T')[0];
         if (!dailyCollection[dk]) dailyCollection[dk] = { date: dk, count: 0, weight: 0 };
-        dailyCollection[dk].count++; dailyCollection[dk].weight += calculateTotalWeight(r);
+        dailyCollection[dk].count++;
+        dailyCollection[dk].weight += calculateTotalWeight(r);
       });
       setCollectionData(Object.values(dailyCollection).sort((a, b) => a.date.localeCompare(b.date)).slice(-30));
 
@@ -1235,10 +1238,7 @@ const AdminDashboard = () => {
               ex.count++; ex.totalWeight += weight;
               ex.intensity = ex.totalWeight; ex.detectionCount += detectionCount;
             } else {
-              locationMap.set(key, {
-                id: key, address, lat: coords.lat, lng: coords.lng,
-                count: 1, totalWeight: weight, intensity: weight, detectionCount,
-              });
+              locationMap.set(key, { id: key, address, lat: coords.lat, lng: coords.lng, count: 1, totalWeight: weight, intensity: weight, detectionCount });
             }
           } catch {}
         }
@@ -1310,25 +1310,25 @@ const AdminDashboard = () => {
     if (d.admin) { setAdmin(d.admin); setAdminRole(d.admin.role); localStorage.setItem('adminData', JSON.stringify(d.admin)); }
   };
 
-  // Chart options
+  // ==================== CHART OPTIONS ====================
   const baseTooltip = {
     backgroundColor: C.deepDark,
     titleFont: { size: 11, family: "'Inter','DM Sans',sans-serif" },
     bodyFont: { size: 10, family: "'Inter','DM Sans',sans-serif" },
     padding: 8, cornerRadius: 6,
   };
-  const chartOptions = {
+  const lineOptions = {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false }, tooltip: baseTooltip },
     scales: {
-      y: { beginAtZero: true, grid: { color: 'rgba(27,43,75,0.05)' }, ticks: { font: { size: 10 }, color: C.mutedGray } },
-      x: { grid: { display: false }, ticks: { font: { size: 10 }, color: C.mutedGray, maxRotation: 40, minRotation: 0 } },
+      y: { beginAtZero: true, grid: { color: 'rgba(27,43,75,0.05)' }, ticks: { font: { size: 10 }, color: C.mutedGray, precision: 0 } },
+      x: { grid: { display: false }, ticks: { font: { size: 10 }, color: C.mutedGray, maxRotation: 35 } },
     },
   };
   const pieChartOptions = {
     responsive: true, maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'bottom', labels: { font: { size: 10.5, family: "'Inter','DM Sans',sans-serif" }, usePointStyle: true, boxWidth: 7, padding: 12 } },
+      legend: { position: 'bottom', labels: { font: { size: 10, family: "'Inter','DM Sans',sans-serif" }, usePointStyle: true, boxWidth: 6, padding: 10 } },
       tooltip: { ...baseTooltip, callbacks: { label: (ctx) => { const total = ctx.dataset.data.reduce((a, b) => a + b, 0); return ` ${ctx.label}: ${ctx.raw} (${((ctx.raw / total) * 100).toFixed(1)}%)`; } } },
     },
   };
@@ -1352,43 +1352,42 @@ const AdminDashboard = () => {
       }
     },
   };
-  const lineOptions = {
+  const barOptions = {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false }, tooltip: baseTooltip },
     scales: {
-      y: { beginAtZero: true, grid: { color: 'rgba(27,43,75,0.05)' }, ticks: { font: { size: 10 }, color: C.mutedGray, precision: 0 } },
-      x: { grid: { display: false }, ticks: { font: { size: 10 }, color: C.mutedGray, maxRotation: 35, minRotation: 0 } },
+      y: { beginAtZero: true, grid: { color: 'rgba(27,43,75,0.05)' }, ticks: { font: { size: 10 }, color: C.mutedGray } },
+      x: { grid: { display: false }, ticks: { font: { size: 10 }, color: C.mutedGray, maxRotation: 40 } },
     },
   };
-  const barOptions = {
-    ...chartOptions,
+  const barOptionsHorizontal = {
+    ...barOptions,
+    indexAxis: 'y',
     scales: {
-      ...chartOptions.scales,
-      y: { ...chartOptions.scales.y, beginAtZero: true, grid: { display: true, color: 'rgba(27,43,75,0.04)' } },
+      x: { beginAtZero: true, grid: { color: 'rgba(27,43,75,0.05)' }, ticks: { font: { size: 10 }, color: C.mutedGray } },
+      y: { grid: { display: false }, ticks: { font: { size: 10 }, color: C.mutedGray } },
     },
   };
 
-  // Chart Data
+  // ==================== CHART DATA ====================
   const classificationChartData = {
     labels: Object.keys(classificationData),
     datasets: [{
       data: Object.values(classificationData),
       backgroundColor: CHART_COLORS.slice(0, Object.keys(classificationData).length),
-      borderColor: C.white, borderWidth: 2, hoverOffset: 6,
+      borderColor: C.cardBg, borderWidth: 2, hoverOffset: 6,
     }],
   };
-
   const dailyTrendsChartData = {
     labels: dailyTrends.slice(-14).map(d => d.date),
     datasets: [{
       label: 'Reports', data: dailyTrends.slice(-14).map(d => d.count),
       borderColor: C.accent, backgroundColor: 'rgba(79,195,247,0.08)',
       fill: true, tension: 0.4,
-      pointBackgroundColor: C.accent, pointBorderColor: C.white,
+      pointBackgroundColor: C.accent, pointBorderColor: C.cardBg,
       pointBorderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
     }],
   };
-
   const statusPolarData = {
     labels: ['Recycled', 'Processed', 'Pending', 'Disposed'],
     datasets: [{
@@ -1397,33 +1396,30 @@ const AdminDashboard = () => {
       borderColor: [C.success, C.accent, C.warning, C.danger], borderWidth: 1.5,
     }],
   };
-
   const getMostScannedItems = () => Object.entries(detectedObjectsData).sort((a, b) => b[1] - a[1]).slice(0, 7);
   const mostScannedItems = getMostScannedItems();
   const totalDetections = Object.values(detectedObjectsData).reduce((a, b) => a + b, 0);
-
   const mostScannedBarData = {
-    labels: mostScannedItems.map(([label]) => label.length > 12 ? label.slice(0, 12) + '…' : label),
+    labels: mostScannedItems.map(([label]) => label.length > 14 ? label.slice(0, 14) + '…' : label),
     datasets: [{
       label: 'Scan Count',
       data: mostScannedItems.map(([, count]) => count),
       backgroundColor: CHART_COLORS.slice(0, mostScannedItems.length),
-      borderColor: C.white, borderWidth: 1, borderRadius: 6, barPercentage: 0.65,
+      borderColor: C.cardBg, borderWidth: 1, borderRadius: 5, barPercentage: 0.65,
     }],
   };
-
   const userRadarData = {
     labels: ['Total', 'Active', 'New/Month', 'New/Week', 'Male', 'Female'],
     datasets: [{
       label: 'Users',
       data: [userAnalytics.totalUsers, userAnalytics.activeUsers, userAnalytics.usersThisMonth, userAnalytics.usersThisWeek, userAnalytics.maleUsers, userAnalytics.femaleUsers],
       borderColor: C.success, backgroundColor: C.success + '22',
-      pointBackgroundColor: C.success, pointBorderColor: C.white,
+      pointBackgroundColor: C.success, pointBorderColor: C.cardBg,
       pointBorderWidth: 2, pointRadius: 4,
     }],
   };
 
-  // Navigation
+  // ==================== NAV ====================
   const navItems = [
     { id: 'dashboard',  label: 'Dashboard',     icon: ICONS.dashboard,  section: 'Overview'   },
     { id: 'analytics',  label: 'Analytics',     icon: ICONS.analytics,  section: 'Insights'   },
@@ -1437,21 +1433,20 @@ const AdminDashboard = () => {
     { id: 'profile',    label: 'Admin Profile', icon: ICONS.profile,    section: 'Account'    },
   ];
   const navSections = ['Overview', 'Insights', 'Operations', 'Records', 'Management', 'Account'];
-
   const pageTitles = {
-    dashboard:  { title: 'Overview Dashboard',      sub: `Welcome back, ${admin?.email?.split('@')[0] || 'Admin'}` },
-    analytics:  { title: 'Waste & User Analytics',  sub: 'Detailed breakdown of collection trends and user insights' },
-    collection: { title: 'Collection Records',      sub: 'Daily waste collection log and tracking' },
-    map:        { title: 'Waste Heat Map',          sub: 'Geographic visualization of collection activity' },
-    users:      { title: 'User Management',         sub: 'Manage residents and monitor account status' },
-    history:    { title: 'Collection History',      sub: 'Complete log of waste collection events' },
-    waste:      { title: 'Waste Reports',           sub: 'Manage and classify waste detection reports' },
-    messages:   { title: 'Messages',                sub: 'Resident communications and inquiries' },
-    posts:      { title: 'Posts Management',        sub: 'Manage community posts and announcements' },
-    profile:    { title: 'Admin Profile',           sub: 'Manage your account and credentials' },
+    dashboard:  { title: 'Overview Dashboard',     sub: `Welcome back, ${admin?.email?.split('@')[0] || 'Admin'}` },
+    analytics:  { title: 'Waste & User Analytics', sub: 'Detailed breakdown of collection trends and user insights' },
+    collection: { title: 'Collection Records',     sub: 'Daily waste collection log and tracking' },
+    map:        { title: 'Waste Heat Map',         sub: 'Geographic visualization of collection activity' },
+    users:      { title: 'User Management',        sub: 'Manage residents and monitor account status' },
+    history:    { title: 'Collection History',     sub: 'Complete log of waste collection events' },
+    waste:      { title: 'Waste Reports',          sub: 'Manage and classify waste detection reports' },
+    messages:   { title: 'Messages',               sub: 'Resident communications and inquiries' },
+    posts:      { title: 'Posts Management',       sub: 'Manage community posts and announcements' },
+    profile:    { title: 'Admin Profile',          sub: 'Manage your account and credentials' },
   };
 
-  // Post Modal
+  // ==================== POST MODAL ====================
   const renderPostModal = () => {
     if (!selectedPost) return null;
     const post = selectedPost;
@@ -1461,16 +1456,15 @@ const AdminDashboard = () => {
     const adminTypeLabel    = getAdminTypeLabel(adminRoleFromPost);
     const roleIcon          = ADMIN_ROLE_ICONS[adminRoleFromPost] || ADMIN_ROLE_ICONS.admin;
     const catLabel          = post.category ? post.category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General';
-    const catIcon           = CATEGORY_ICONS[post.category] || CATEGORY_ICONS.general;
+    const catIcon           = (post.category && CATEGORY_ICONS[post.category]) || CATEGORY_ICONS.general;
     const likeCount         = post.likes?.length || 0;
     const commentCount      = post.commentCount || post.comments?.length || 0;
-
     return (
       <div style={S.postModal} onClick={() => setSelectedPost(null)}>
         <div style={S.postModalBox} onClick={e => e.stopPropagation()}>
           <div style={S.postModalHeader}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ ...S.postAvatar, width: 42, height: 42 }}>
+              <div style={{ ...S.postAvatar, width: 40, height: 40 }}>
                 {post.admin?.profile
                   ? <img src={post.admin.profile} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   : <span>{adminDisplayName.charAt(0).toUpperCase()}</span>}
@@ -1490,7 +1484,9 @@ const AdminDashboard = () => {
                 </div>
               </div>
             </div>
-            <button style={S.postModalCloseBtn} onClick={() => setSelectedPost(null)}>✕</button>
+            <button style={S.postModalCloseBtn} onClick={() => setSelectedPost(null)}>
+              <Icon d={ICONS.close} size={12} color={C.bodyGray} strokeWidth={2.5} />
+            </button>
           </div>
           <div style={S.postModalBody}>
             {post.image && (
@@ -1500,23 +1496,22 @@ const AdminDashboard = () => {
               />
             )}
             <div style={{ padding: '16px 18px 18px' }}>
-              <p style={{ fontSize: 16, fontWeight: 700, color: C.navyDark, margin: '0 0 10px' }}>{post.title}</p>
-              <p style={{ fontSize: 13.5, color: C.bodyGray, lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>{post.content}</p>
-              <div style={{ display: 'flex', gap: 16, marginTop: 16, paddingTop: 12, borderTop: '1px solid rgba(27,43,75,0.07)', fontSize: 12, color: C.mutedGray }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon d={ICONS.heart} size={13} color={C.mutedGray} strokeWidth={2} /> {likeCount} likes</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon d={ICONS.comment} size={13} color={C.mutedGray} strokeWidth={2} /> {commentCount} comments</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon d={ICONS.eye} size={13} color={C.mutedGray} strokeWidth={2} /> {post.views || 0} views</span>
+              <p style={{ fontSize: 15, fontWeight: 700, color: C.navyDark, margin: '0 0 10px' }}>{post.title}</p>
+              <p style={{ fontSize: 13, color: C.bodyGray, lineHeight: 1.75, margin: 0, whiteSpace: 'pre-wrap' }}>{post.content}</p>
+              <div style={{ display: 'flex', gap: 16, marginTop: 16, paddingTop: 12, borderTop: `1px solid rgba(27,43,75,0.07)`, fontSize: 12, color: C.mutedGray }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon d={ICONS.heart} size={12} color={C.mutedGray} strokeWidth={2} /> {likeCount} likes</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon d={ICONS.comment} size={12} color={C.mutedGray} strokeWidth={2} /> {commentCount} comments</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon d={ICONS.eye} size={12} color={C.mutedGray} strokeWidth={2} /> {post.views || 0} views</span>
               </div>
             </div>
           </div>
-          <div style={{ ...S.postActions, borderTop: '1px solid rgba(27,43,75,0.07)', flexShrink: 0 }}>
+          <div style={{ ...S.postActions, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
             {[{ icon: ICONS.heart, label: 'Like' }, { icon: ICONS.comment, label: 'Comment' }, { icon: ICONS.share, label: 'Share' }].map(({ icon, label }) => (
-              <button key={label} style={{ ...S.postActionBtn, fontSize: 13 }}
+              <button key={label} style={{ ...S.postActionBtn, fontSize: 12 }}
                 onClick={() => setActiveSection('posts')}
                 onMouseEnter={e => { e.currentTarget.style.background = C.pageBg; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-              >
-                <Icon d={icon} size={15} color={C.bodyGray} strokeWidth={1.8} />{label}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
+                <Icon d={icon} size={14} color={C.bodyGray} strokeWidth={1.8} />{label}
               </button>
             ))}
           </div>
@@ -1525,31 +1520,30 @@ const AdminDashboard = () => {
     );
   };
 
-  // Feed Panel
+  // ==================== FEED PANEL ====================
   const renderFeedPanel = () => (
     <div style={S.feedPanel}>
       <div style={S.feedStickyHeader}>
         <h4 style={S.feedTitle}>
-          <Icon d={ICONS.megaphone} size={14} color={C.navyDark} strokeWidth={2} />
+          <Icon d={ICONS.megaphone} size={13} color={C.navyDark} strokeWidth={2} />
           Announcements
         </h4>
         <span style={S.viewAllLink}
           onClick={() => setActiveSection('posts')}
           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(79,195,247,0.15)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(79,195,247,0.08)'; }}
-        >
-          View All <Icon d={ICONS.arrowRight} size={11} color={C.accent} strokeWidth={2.5} />
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(79,195,247,0.08)'; }}>
+          View All <Icon d={ICONS.arrowRight} size={10} color={C.accentDeep} strokeWidth={2.5} />
         </span>
       </div>
       <div style={S.feedScrollArea}>
         {recentPosts.length === 0 ? (
           <div style={S.feedEmpty}>
-            <Icon d={ICONS.filetext} size={32} color={C.mutedGray} strokeWidth={1.2} />
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.bodyGray, marginTop: 10 }}>No posts yet</div>
-            <div style={{ fontSize: 11, marginTop: 4, color: C.mutedGray }}>Create your first post</div>
+            <Icon d={ICONS.filetext} size={30} color={C.mutedGray} strokeWidth={1.2} />
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: C.bodyGray, marginTop: 10 }}>No posts yet</div>
+            <div style={{ fontSize: 11, marginTop: 4, color: C.mutedGray }}>Create your first post to get started</div>
           </div>
         ) : recentPosts.map((post) => {
-          const catIcon           = CATEGORY_ICONS[post.category] || CATEGORY_ICONS.general;
+          const catIcon           = (post.category && CATEGORY_ICONS[post.category]) || CATEGORY_ICONS.general;
           const likeCount         = post.likes?.length || 0;
           const commentCount      = post.commentCount || post.comments?.length || 0;
           const catLabel          = post.category ? post.category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'General';
@@ -1558,14 +1552,12 @@ const AdminDashboard = () => {
           const adminBadge        = getAdminBadgeStyle(adminRoleFromPost);
           const adminTypeLabel    = getAdminTypeLabel(adminRoleFromPost);
           const roleIcon          = ADMIN_ROLE_ICONS[adminRoleFromPost] || ADMIN_ROLE_ICONS.admin;
-          const EXCERPT_LIMIT     = 120;
+          const EXCERPT_LIMIT     = 110;
           const isLong            = post.content.length > EXCERPT_LIMIT;
-
           return (
             <div key={post._id} style={S.postCard}
               onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 3px 12px rgba(27,43,75,0.1)'; }}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 3px rgba(27,43,75,0.04)'; }}
-            >
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 3px rgba(27,43,75,0.04)'; }}>
               <div style={S.postCardHeader}>
                 <div style={S.postAvatar}>
                   {post.admin?.profile
@@ -1575,22 +1567,21 @@ const AdminDashboard = () => {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={S.postAuthorName}>{adminDisplayName}</p>
                   <div style={S.postAuthorMeta}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: adminBadge.bg, color: adminBadge.color, fontSize: 9.5, fontWeight: 600, padding: '2px 7px', borderRadius: 20 }}>
-                      <Icon d={roleIcon} size={8} color={adminBadge.color} strokeWidth={2.2} />{adminTypeLabel}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: adminBadge.bg, color: adminBadge.color, fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20 }}>
+                      <Icon d={roleIcon} size={7} color={adminBadge.color} strokeWidth={2.2} />{adminTypeLabel}
                     </span>
-                    <span style={{ color: 'rgba(27,43,75,0.2)', fontSize: 12 }}>·</span>
-                    <span style={{ fontSize: 10, color: C.mutedGray, display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Icon d={ICONS.calendar} size={9} color={C.mutedGray} strokeWidth={2} />
+                    <span style={{ color: 'rgba(27,43,75,0.2)', fontSize: 11 }}>·</span>
+                    <span style={{ fontSize: 9.5, color: C.mutedGray }}>
                       {new Date(post.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
                   </div>
-                  <div style={{ marginTop: 4 }}>
+                  <div style={{ marginTop: 3 }}>
                     <span style={getCatBadgeStyle(post.category)}>
-                      <Icon d={catIcon} size={8} color="currentColor" strokeWidth={2} />{catLabel}
+                      <Icon d={catIcon} size={7} color="currentColor" strokeWidth={2} />{catLabel}
                     </span>
                     {post.isPinned && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: '#FFF3E0', color: C.warning, fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 20, marginLeft: 4 }}>
-                        <Icon d={ICONS.pin} size={8} color={C.warning} strokeWidth={2} />Pinned
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: '#FFF3E0', color: C.warning, fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 20, marginLeft: 4 }}>
+                        <Icon d={ICONS.pin} size={7} color={C.warning} strokeWidth={2} />Pinned
                       </span>
                     )}
                   </div>
@@ -1598,31 +1589,29 @@ const AdminDashboard = () => {
               </div>
               {post.image && (
                 <img src={post.image} alt={post.title} style={S.postImage}
-                  onError={e => { e.target.style.display = 'none'; }}
-                />
+                  onError={e => { e.target.style.display = 'none'; }} />
               )}
               <div style={S.postBody}>
                 <p style={S.postTitle}>{post.title}</p>
                 <p style={S.postExcerpt}>{isLong ? post.content.substring(0, EXCERPT_LIMIT) + '…' : post.content}</p>
-                {isLong && <span style={S.seeMore} onClick={() => setSelectedPost(post)}>See more</span>}
+                {isLong && <span style={S.seeMore} onClick={() => setSelectedPost(post)}>Read more</span>}
               </div>
               <div style={S.postFooter}>
-                <div style={S.postStat}><Icon d={ICONS.heart} size={11} color={C.mutedGray} strokeWidth={2} />&nbsp;{likeCount}</div>
+                <div style={S.postStat}><Icon d={ICONS.heart} size={10} color={C.mutedGray} strokeWidth={2} />&nbsp;{likeCount}</div>
                 <div style={S.postStat}>
-                  <Icon d={ICONS.comment} size={11} color={C.mutedGray} strokeWidth={2} />&nbsp;{commentCount}
+                  <Icon d={ICONS.comment} size={10} color={C.mutedGray} strokeWidth={2} />&nbsp;{commentCount}
                   &nbsp;&nbsp;
-                  <Icon d={ICONS.eye} size={11} color={C.mutedGray} strokeWidth={2} />&nbsp;{post.views || 0}
+                  <Icon d={ICONS.eye} size={10} color={C.mutedGray} strokeWidth={2} />&nbsp;{post.views || 0}
                 </div>
               </div>
               <div style={S.postActions}>
                 {[{ icon: ICONS.heart, label: 'Like' }, { icon: ICONS.comment, label: 'Comment' }, { icon: ICONS.share, label: 'Share' }].map(({ icon, label }, idx) => (
                   <button key={label}
-                    style={{ ...S.postActionBtn, borderRight: idx < 2 ? '1px solid rgba(27,43,75,0.05)' : 'none' }}
+                    style={{ ...S.postActionBtn, borderRight: idx < 2 ? `1px solid rgba(27,43,75,0.05)` : 'none' }}
                     onClick={() => setSelectedPost(post)}
                     onMouseEnter={e => { e.currentTarget.style.background = C.pageBg; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-                  >
-                    <Icon d={icon} size={13} color={C.bodyGray} strokeWidth={1.8} />{label}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
+                    <Icon d={icon} size={12} color={C.bodyGray} strokeWidth={1.8} />{label}
                   </button>
                 ))}
               </div>
@@ -1633,46 +1622,50 @@ const AdminDashboard = () => {
     </div>
   );
 
-  // Charts Panel
+  // ==================== CHARTS PANEL (Dashboard) ====================
   const renderChartsPanel = () => (
     <div style={S.chartsPanel}>
       <div style={S.chartRow}>
         <div style={S.chartCard}>
-          <p style={S.chartCardTitle}>
-            <span style={S.chartDot(C.accent)} />
-            Daily Trend — 14 days
-          </p>
-          <div style={S.chartContainer}>
-            <Line data={dailyTrendsChartData} options={lineOptions} />
+          <div style={S.chartCardHeader}>
+            <p style={S.chartCardTitle}>
+              <span style={S.chartDot(C.accent)} />
+              Daily Trend — 14 Days
+            </p>
           </div>
+          <div style={S.chartContainer}><Line data={dailyTrendsChartData} options={lineOptions} /></div>
         </div>
         <div style={S.chartCard}>
-          <p style={S.chartCardTitle}>
-            <span style={S.chartDot(C.warning)} />
-            Report Status
-          </p>
-          <div style={S.chartContainer}>
-            <PolarArea data={statusPolarData} options={polarOptions} />
+          <div style={S.chartCardHeader}>
+            <p style={S.chartCardTitle}>
+              <span style={S.chartDot(C.warning)} />
+              Report Status
+            </p>
           </div>
+          <div style={S.chartContainer}><PolarArea data={statusPolarData} options={polarOptions} /></div>
         </div>
       </div>
       <div style={S.chartRow}>
         <div style={S.chartCard}>
-          <p style={S.chartCardTitle}>
-            <span style={S.chartDot(C.success)} />
-            Waste Classification
-          </p>
+          <div style={S.chartCardHeader}>
+            <p style={S.chartCardTitle}>
+              <span style={S.chartDot(C.success)} />
+              Waste Classification
+            </p>
+          </div>
           <div style={S.chartContainer}>
             {Object.keys(classificationData).length > 0
               ? <Pie data={classificationChartData} options={pieChartOptions} />
-              : <div style={{ textAlign: 'center', paddingTop: 60, color: C.mutedGray, fontSize: 12 }}>No data</div>}
+              : <div style={{ textAlign: 'center', paddingTop: 60, color: C.mutedGray, fontSize: 12 }}>No data available</div>}
           </div>
         </div>
         <div style={S.chartCard}>
-          <p style={S.chartCardTitle}>
-            <span style={S.chartDot(C.danger)} />
-            Most Scanned Items
-          </p>
+          <div style={S.chartCardHeader}>
+            <p style={S.chartCardTitle}>
+              <span style={S.chartDot(C.danger)} />
+              Most Scanned Items
+            </p>
+          </div>
           <div style={S.chartContainer}>
             {mostScannedItems.length > 0
               ? <Bar data={mostScannedBarData} options={barOptions} />
@@ -1683,59 +1676,31 @@ const AdminDashboard = () => {
     </div>
   );
 
-  // Dashboard
+  // ==================== DASHBOARD ====================
   const renderDashboard = () => {
     const weeklyGrowthPct = `${Math.abs(Math.round(dashboardStats.weeklyGrowth))}%`;
     const weeklyUp        = dashboardStats.weeklyGrowth >= 0;
-
     return (
       <>
         <SectionHeading>System Overview</SectionHeading>
         <div style={S.statsGrid}>
-          <StatCard
-            label="Total Reports"
-            value={dashboardStats.totalReports.toLocaleString()}
+          <StatCard label="Total Reports" value={dashboardStats.totalReports.toLocaleString()}
             sub={`${weeklyGrowthPct} ${weeklyUp ? 'increase' : 'decrease'} vs last week`}
-            color={C.accent}
-            iconPath={ICONS.collection}
-            trendUp={weeklyUp}
-            trendPct={weeklyGrowthPct}
-            sparkData={sparkReports}
-            onClick={() => setActiveSection('collection')}
-          />
-          <StatCard
-            label="Total Weight Collected"
-            value={`${dashboardStats.totalWeight} kg`}
+            color={C.accent} iconPath={ICONS.collection} trendUp={weeklyUp} trendPct={weeklyGrowthPct}
+            sparkData={sparkReports} onClick={() => setActiveSection('collection')} />
+          <StatCard label="Total Weight Collected" value={`${dashboardStats.totalWeight} kg`}
             sub={`${dashboardStats.totalReports} items scanned`}
-            color={C.navyMid}
-            iconPath={ICONS.weight}
-            trendUp={true}
-            trendPct={weeklyGrowthPct}
-            sparkData={sparkWeight}
-            onClick={() => setActiveSection('collection')}
-          />
-          <StatCard
-            label="Total Users"
-            value={userAnalytics.totalUsers.toLocaleString()}
+            color={C.navyMid} iconPath={ICONS.weight} trendUp={true} trendPct={weeklyGrowthPct}
+            sparkData={sparkWeight} onClick={() => setActiveSection('collection')} />
+          <StatCard label="Total Users" value={userAnalytics.totalUsers.toLocaleString()}
             sub={`${userAnalytics.usersThisMonth} new this month`}
-            color={C.success}
-            iconPath={ICONS.users}
-            trendUp={true}
-            trendPct={`${userAnalytics.usersThisWeek} this wk`}
-            sparkData={sparkUsers}
-            onClick={() => setActiveSection('users')}
-          />
-          <StatCard
-            label="Active Locations"
-            value={locationAnalytics.totalUniqueLocations || 0}
+            color={C.success} iconPath={ICONS.users} trendUp={true} trendPct={`${userAnalytics.usersThisWeek} this wk`}
+            sparkData={sparkUsers} onClick={() => setActiveSection('users')} />
+          <StatCard label="Active Locations" value={locationAnalytics.totalUniqueLocations || 0}
             sub={`${locationAnalytics.top5Locations?.length || 0} hotspot areas`}
-            color={C.danger}
-            iconPath={ICONS.location}
-            trendUp={false}
+            color={C.danger} iconPath={ICONS.location} trendUp={false}
             trendPct={`${locationAnalytics.top5Locations?.length || 0} hot`}
-            sparkData={sparkLocations}
-            onClick={() => setActiveSection('map')}
-          />
+            sparkData={sparkLocations} onClick={() => setActiveSection('map')} />
         </div>
         <div style={S.dashboardColumns}>
           {renderChartsPanel()}
@@ -1745,221 +1710,320 @@ const AdminDashboard = () => {
     );
   };
 
-  // Analytics
+  // ==================== ANALYTICS (REDESIGNED) ====================
   const renderAnalytics = () => {
-    const activeRate = userAnalytics.totalUsers > 0 ? Math.round((userAnalytics.activeUsers / userAnalytics.totalUsers) * 100) : 0;
-    const maleRate   = userAnalytics.totalUsers > 0 ? Math.round((userAnalytics.maleUsers   / userAnalytics.totalUsers) * 100) : 0;
+    const activeRate  = userAnalytics.totalUsers > 0 ? Math.round((userAnalytics.activeUsers / userAnalytics.totalUsers) * 100) : 0;
+    const bannedRate  = userAnalytics.totalUsers > 0 ? Math.round((userAnalytics.bannedUsers / userAnalytics.totalUsers) * 100) : 0;
+    const maleRate    = userAnalytics.totalUsers > 0 ? Math.round((userAnalytics.maleUsers   / userAnalytics.totalUsers) * 100) : 0;
+    const femaleRate  = 100 - maleRate;
+    const monthlyRate = userAnalytics.totalUsers > 0 ? Math.round((userAnalytics.usersThisMonth / userAnalytics.totalUsers) * 100) : 0;
+    const totalReports = dashboardStats.totalReports;
 
     return (
-      <>
+      <div style={S.analyticsPage}>
+
+        {/* External Analytics Component */}
         <Analytics adminRole={adminRole} barangayName={getBarangayName(adminRole)} />
 
+        {/* ---- USER ANALYTICS ---- */}
         <SectionHeading>User Analytics</SectionHeading>
-        <div style={S.userAnalyticsCard}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid rgba(27,43,75,0.07)' }}>
-            <div style={{ padding: '0 20px 0 0', borderRight: '1px solid rgba(27,43,75,0.07)', marginRight: 20 }}>
-              <div style={S.userStatSectionLabel}>User Status</div>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: C.success, lineHeight: 1, marginBottom: 3 }}>{userAnalytics.activeUsers}</div>
-                  <div style={{ fontSize: 10.5, color: C.bodyGray }}>Active</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: C.danger, lineHeight: 1, marginBottom: 3 }}>{userAnalytics.bannedUsers}</div>
-                  <div style={{ fontSize: 10.5, color: C.bodyGray }}>Banned</div>
-                </div>
-              </div>
-              <div style={{ fontSize: 11, color: C.mutedGray, marginBottom: 5 }}>Active Rate: {activeRate}%</div>
-              <div style={S.activeRateBar}><div style={S.activeRateFill(activeRate, C.success)} /></div>
-            </div>
-            <div style={{ padding: '0 20px', borderRight: '1px solid rgba(27,43,75,0.07)' }}>
-              <div style={S.userStatSectionLabel}>Gender Distribution</div>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, lineHeight: 1, marginBottom: 3 }}>{userAnalytics.maleUsers}</div>
-                  <div style={{ fontSize: 10.5, color: C.bodyGray }}>Male</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: C.warning, lineHeight: 1, marginBottom: 3 }}>{userAnalytics.femaleUsers}</div>
-                  <div style={{ fontSize: 10.5, color: C.bodyGray }}>Female</div>
-                </div>
-              </div>
-              <div style={{ fontSize: 11, color: C.mutedGray, marginBottom: 5 }}>Male: {maleRate}% · Female: {100 - maleRate}%</div>
-              <div style={S.activeRateBar}><div style={S.activeRateFill(maleRate, C.accent)} /></div>
-            </div>
-            <div style={{ padding: '0 0 0 20px' }}>
-              <div style={S.userStatSectionLabel}>Growth</div>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: C.navyMid, lineHeight: 1, marginBottom: 3 }}>{userAnalytics.usersThisMonth}</div>
-                  <div style={{ fontSize: 10.5, color: C.bodyGray }}>This Month</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: C.accent, lineHeight: 1, marginBottom: 3 }}>{userAnalytics.usersThisWeek}</div>
-                  <div style={{ fontSize: 10.5, color: C.bodyGray }}>This Week</div>
-                </div>
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: C.navyDark }}>{userAnalytics.totalUsers}</div>
-              <div style={{ fontSize: 11, color: C.mutedGray }}>Total Registered Users</div>
-            </div>
+
+        {/* Metric cards row */}
+        <div style={S.metricRow}>
+          <MetricCard
+            label="Total Users"
+            value={userAnalytics.totalUsers.toLocaleString()}
+            sub="Registered residents"
+            color={C.navyDark}
+            iconPath={ICONS.users}
+          />
+          <MetricCard
+            label="Active Users"
+            value={userAnalytics.activeUsers.toLocaleString()}
+            sub={`${activeRate}% of total users`}
+            color={C.success}
+            iconPath={ICONS.userCheck}
+            barPct={activeRate}
+          />
+          <MetricCard
+            label="New This Month"
+            value={userAnalytics.usersThisMonth.toLocaleString()}
+            sub={`${userAnalytics.usersThisWeek} joined this week`}
+            color={C.accentDeep}
+            iconPath={ICONS.calendar}
+            barPct={monthlyRate}
+          />
+          <MetricCard
+            label="Banned Accounts"
+            value={userAnalytics.bannedUsers.toLocaleString()}
+            sub={`${bannedRate}% of total users`}
+            color={C.danger}
+            iconPath={ICONS.userX}
+            barPct={bannedRate}
+          />
+        </div>
+
+        {/* User panel: stats + radar */}
+        <div style={S.userPanel}>
+          <div style={S.userPanelHeader}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.navyDark, display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.success, display: 'inline-block' }} />
+              User Overview
+            </p>
           </div>
-          <div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: C.navyDark, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.success, display: 'inline-block', flexShrink: 0 }} />
-              User Metrics Overview
+          <div style={S.userPanelBody}>
+            {/* Left: stat blocks */}
+            <div style={S.userPanelLeft}>
+              <div style={S.userStatBlock}>
+                <div style={S.userStatBlockLabel}>
+                  <Icon d={ICONS.activity} size={11} color={C.mutedGray} strokeWidth={2} />
+                  Account Status
+                </div>
+                <div style={S.userStatRow}>
+                  <div style={S.userStatItem}>
+                    <div style={S.userStatNum(C.success)}>{userAnalytics.activeUsers}</div>
+                    <div style={S.userStatLabel}>Active</div>
+                  </div>
+                  <div style={S.userStatItem}>
+                    <div style={S.userStatNum(C.danger)}>{userAnalytics.bannedUsers}</div>
+                    <div style={S.userStatLabel}>Banned</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: C.mutedGray, marginBottom: 5 }}>Active rate: {activeRate}%</div>
+                <div style={S.ratioBar}>
+                  <div style={S.ratioFill(C.success, activeRate)} />
+                </div>
+                <div style={S.ratioLabel}><span>Active</span><span>{activeRate}%</span></div>
+              </div>
+
+              <div style={S.userStatBlock}>
+                <div style={S.userStatBlockLabel}>
+                  <Icon d={ICONS.users} size={11} color={C.mutedGray} strokeWidth={2} />
+                  Gender Distribution
+                </div>
+                <div style={S.userStatRow}>
+                  <div style={S.userStatItem}>
+                    <div style={S.userStatNum(C.accentDeep)}>{userAnalytics.maleUsers}</div>
+                    <div style={S.userStatLabel}>Male</div>
+                  </div>
+                  <div style={S.userStatItem}>
+                    <div style={S.userStatNum(C.purple)}>{userAnalytics.femaleUsers}</div>
+                    <div style={S.userStatLabel}>Female</div>
+                  </div>
+                </div>
+                <div style={{ position: 'relative', height: 6, borderRadius: 4, overflow: 'hidden', background: 'rgba(27,43,75,0.06)', marginBottom: 5 }}>
+                  <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${maleRate}%`, background: C.accentDeep, borderRadius: 4, transition: 'width 0.6s ease' }} />
+                  <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: `${femaleRate}%`, background: C.purple, borderRadius: 4, transition: 'width 0.6s ease' }} />
+                </div>
+                <div style={S.ratioLabel}><span style={{ color: C.accentDeep }}>Male {maleRate}%</span><span style={{ color: C.purple }}>Female {femaleRate}%</span></div>
+              </div>
+
+              <div style={S.userStatBlock}>
+                <div style={S.userStatBlockLabel}>
+                  <Icon d={ICONS.trending} size={11} color={C.mutedGray} strokeWidth={2} />
+                  Growth
+                </div>
+                <div style={S.userStatRow}>
+                  <div style={S.userStatItem}>
+                    <div style={S.userStatNum(C.navyMid)}>{userAnalytics.usersThisMonth}</div>
+                    <div style={S.userStatLabel}>This Month</div>
+                  </div>
+                  <div style={S.userStatItem}>
+                    <div style={S.userStatNum(C.accent)}>{userAnalytics.usersThisWeek}</div>
+                    <div style={S.userStatLabel}>This Week</div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div style={{ height: 260 }}>
-              {userAnalytics.totalUsers > 0
-                ? <Radar data={userRadarData} options={radarOptions} />
-                : <div style={{ textAlign: 'center', paddingTop: 80, color: C.mutedGray, fontSize: 13 }}>No user data available</div>}
+            {/* Right: radar chart */}
+            <div style={S.userPanelRight}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: C.navyDark, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.success, display: 'inline-block', flexShrink: 0 }} />
+                User Metrics Radar
+              </div>
+              <div style={{ height: 300 }}>
+                {userAnalytics.totalUsers > 0
+                  ? <Radar data={userRadarData} options={radarOptions} />
+                  : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 300, color: C.mutedGray, gap: 8 }}>
+                      <Icon d={ICONS.target} size={32} color={C.mutedGray} strokeWidth={1.2} />
+                      <span style={{ fontSize: 12 }}>No user data available</span>
+                    </div>}
+              </div>
             </div>
           </div>
         </div>
 
+        {/* ---- WASTE ANALYTICS ---- */}
         <SectionHeading>Waste Analytics</SectionHeading>
-        <div style={S.wasteAnalyticsGrid}>
-          <div style={{ ...S.wasteCol, borderRight: '1px solid rgba(27,43,75,0.07)' }}>
-            <div style={S.colHeader}>
-              <span style={S.colHeaderDot(C.accent)} />
-              <p style={S.colTitle}>Classification Breakdown</p>
+
+        {/* Status summary strip */}
+        <div style={S.statusStrip}>
+          <div style={S.statusStripInner}>
+            <div style={S.weightCircle}>
+              <div style={S.weightNum}>{dashboardStats.totalWeight}</div>
+              <div style={S.weightUnit}>kg total</div>
             </div>
-            {Object.keys(classificationData).length > 0 ? (
-              <div style={{ height: 280 }}>
-                <Pie data={classificationChartData} options={pieChartOptions} />
-              </div>
+            <div style={S.statusBarsWrap}>
+              {[
+                { label: 'Recycled',  value: dashboardStats.recycledReports,  color: C.success },
+                { label: 'Processed', value: dashboardStats.processedReports, color: C.accent  },
+                { label: 'Pending',   value: dashboardStats.pendingReports,   color: C.warning  },
+                { label: 'Disposed',  value: dashboardStats.disposedReports,  color: C.danger   },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={S.statusBarRow}>
+                  <div style={S.statusBarMeta}>
+                    <span style={S.statusBarKey}>{label}</span>
+                    <span style={S.statusBarVal}>{value}</span>
+                  </div>
+                  <div style={S.statusBarTrack}>
+                    <div style={S.statusBarFill(color, totalReports > 0 ? (value / totalReports) * 100 : 0)} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={S.statusStripRight}>
+              <div style={S.stripTotalLabel}>Total Reports</div>
+              <div style={S.stripTotalValue}>{totalReports}</div>
+              <div style={S.stripSubLabel}>{getBarangayName()}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Classification + Scanned items: side by side */}
+        <div style={S.analyticsChartGrid}>
+          {/* Classification Pie */}
+          <div style={S.chartCard}>
+            <div style={S.chartCardHeader}>
+              <p style={S.chartCardTitle}>
+                <span style={S.chartDot(C.accent)} />
+                Waste Classification
+              </p>
+              <span style={{ fontSize: 11, color: C.mutedGray }}>{Object.keys(classificationData).length} categories</span>
+            </div>
+            <div style={S.chartContainerTall}>
+              {Object.keys(classificationData).length > 0
+                ? <Pie data={classificationChartData} options={pieChartOptions} />
+                : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.mutedGray, gap: 8 }}>
+                    <Icon d={ICONS.chartPie} size={32} color={C.mutedGray} strokeWidth={1.2} />
+                    <span style={{ fontSize: 12 }}>No classification data</span>
+                  </div>}
+            </div>
+          </div>
+
+          {/* Most Scanned Items: chart + ranked list */}
+          <div style={S.chartCard}>
+            <div style={S.chartCardHeader}>
+              <p style={S.chartCardTitle}>
+                <span style={S.chartDot(C.navyMid)} />
+                Most Scanned Items
+              </p>
+              <span style={{ fontSize: 11, color: C.mutedGray }}>{totalDetections} total detections</span>
+            </div>
+            {mostScannedItems.length > 0 ? (
+              <>
+                <div style={{ height: 140, marginBottom: 12 }}>
+                  <Bar data={mostScannedBarData} options={barOptions} />
+                </div>
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                  {mostScannedItems.slice(0, 5).map(([label, count], idx) => (
+                    <div key={idx} style={S.scannedItem}>
+                      <span style={S.scannedRank}>#{idx + 1}</span>
+                      <span style={S.scannedLabel}>{label}</span>
+                      <span style={S.scannedCount(CHART_COLORS[idx % CHART_COLORS.length])}>{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 280, color: C.mutedGray, gap: 8 }}>
-                <Icon d={ICONS.chartPie} size={36} color={C.mutedGray} strokeWidth={1.2} />
-                <span style={{ fontSize: 12 }}>No classification data</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, color: C.mutedGray, gap: 8 }}>
+                <Icon d={ICONS.scan} size={32} color={C.mutedGray} strokeWidth={1.2} />
+                <span style={{ fontSize: 12 }}>No scan data available</span>
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ ...S.wasteCol, borderBottom: '1px solid rgba(27,43,75,0.07)' }}>
-              <div style={S.colHeader}>
-                <span style={S.colHeaderDot(C.navyMid)} />
-                <p style={S.colTitle}>Most Scanned Items</p>
-              </div>
-              {mostScannedItems.length > 0 ? (
-                <>
-                  <div style={{ height: 150, marginBottom: 12 }}>
-                    <Bar data={mostScannedBarData} options={barOptions} />
-                  </div>
-                  <div style={{ borderTop: '1px solid rgba(27,43,75,0.06)', paddingTop: 10 }}>
-                    {mostScannedItems.slice(0, 5).map(([label, count], idx) => (
-                      <div key={idx} style={S.scannedItem}>
-                        <span style={S.scannedRank}>#{idx + 1}</span>
-                        <span style={S.scannedLabel}>{label}</span>
-                        <span style={S.scannedBadge(CHART_COLORS[idx % CHART_COLORS.length])}>{count}</span>
-                      </div>
-                    ))}
-                    <div style={{ fontSize: 10.5, color: C.mutedGray, marginTop: 8, textAlign: 'right' }}>
-                      {totalDetections} total detections
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 180, color: C.mutedGray, gap: 8 }}>
-                  <Icon d={ICONS.scan} size={36} color={C.mutedGray} strokeWidth={1.2} />
-                  <span style={{ fontSize: 12 }}>No scan data available</span>
-                </div>
-              )}
+        </div>
+
+        {/* Daily trend + Status polar: side by side */}
+        <div style={S.analyticsChartGridEqual}>
+          <div style={S.chartCard}>
+            <div style={S.chartCardHeader}>
+              <p style={S.chartCardTitle}>
+                <span style={S.chartDot(C.accent)} />
+                14-Day Collection Trend
+              </p>
             </div>
+            <div style={S.chartContainerTall}><Line data={dailyTrendsChartData} options={lineOptions} /></div>
+          </div>
+          <div style={S.chartCard}>
+            <div style={S.chartCardHeader}>
+              <p style={S.chartCardTitle}>
+                <span style={S.chartDot(C.warning)} />
+                Status Distribution
+              </p>
+            </div>
+            <div style={S.chartContainerTall}><PolarArea data={statusPolarData} options={polarOptions} /></div>
           </div>
         </div>
 
-        <div style={S.totalCollectedFull}>
-          <div style={S.totalCollectedContent}>
-            <div style={S.totalCollectedLeft}>
-              <div style={S.weightCircleLarge}>
-                <div style={S.weightNumLarge}>{dashboardStats.totalWeight}</div>
-                <div style={S.weightUnitLarge}>kg</div>
-              </div>
-              <div style={S.statusBarsContainer}>
-                {[
-                  { label: 'Recycled',  value: dashboardStats.recycledReports,  color: C.success },
-                  { label: 'Processed', value: dashboardStats.processedReports, color: C.accent  },
-                  { label: 'Pending',   value: dashboardStats.pendingReports,   color: C.warning  },
-                  { label: 'Disposed',  value: dashboardStats.disposedReports,  color: C.danger   },
-                ].map(({ label, value, color }) => (
-                  <div key={label} style={S.statusBarItem}>
-                    <div style={S.statusBarLabel}>
-                      <span style={S.statusBarLabelText}>{label}</span>
-                      <span style={S.statusBarValue}>{value}</span>
-                    </div>
-                    <div style={S.statusBarTrack}>
-                      <div style={S.statusBarFill(color, dashboardStats.totalReports > 0 ? (value / dashboardStats.totalReports) * 100 : 0)} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={S.totalCollectedRight}>
-              <div style={S.totalReportsValue}>{dashboardStats.totalReports}</div>
-              <div style={S.totalReportsText}>Total Reports</div>
-            </div>
-          </div>
-        </div>
-
-        <div style={S.locationCard}>
-          <div style={S.locationHeader}>
-            <div style={S.colHeader}>
-              <span style={S.colHeaderDot(C.danger)} />
-              <p style={S.colTitle}>Location Breakdown</p>
-            </div>
+        {/* ---- LOCATION BREAKDOWN ---- */}
+        <SectionHeading>Location Breakdown</SectionHeading>
+        <div style={S.locationPanel}>
+          <div style={S.locationPanelHeader}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.navyDark, display: 'flex', alignItems: 'center', gap: 7 }}>
+              <Icon d={ICONS.location} size={14} color={C.danger} strokeWidth={2} />
+              Top Collection Locations
+            </p>
             {locationAnalytics.mostActiveLocation && (
-              <div style={S.locationMostActive}>
+              <div style={{ fontSize: 11, color: C.bodyGray, background: C.pageBg, padding: '5px 11px', borderRadius: 20, border: `1px solid ${C.border}` }}>
                 Most active: <strong style={{ color: C.danger }}>{locationAnalytics.mostActiveLocation.address}</strong>
-                {' '}· {locationAnalytics.mostActiveLocation.count} reports
+                &nbsp;&middot;&nbsp;{locationAnalytics.mostActiveLocation.count} reports
               </div>
             )}
           </div>
           {locationDetections.length > 0 ? (
             <>
-              <div style={S.locationTableHeader}>
-                <span>#</span><span>Location</span>
+              <div style={S.locationTableHead}>
+                <span>#</span>
+                <span>Location</span>
                 <span style={{ textAlign: 'center' }}>Reports</span>
                 <span style={{ textAlign: 'center' }}>Detections</span>
               </div>
               {locationDetections.map((loc) => (
-                <div key={loc.rank} style={S.locationRow}
+                <div key={loc.rank} style={S.locationTableRow}
                   onMouseEnter={e => { e.currentTarget.style.background = C.pageBg; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                  onClick={() => console.log('Selected location:', loc)}
-                >
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                   <span style={S.locationRank}>#{loc.rank}</span>
                   <span style={S.locationName}>{loc.name}</span>
-                  <span style={{ ...S.locationReports, textAlign: 'center' }}>{loc.reports}</span>
+                  <span style={{ ...S.locationReports }}>{loc.reports}</span>
                   <span style={{ textAlign: 'center' }}>
-                    <span style={S.locationDetections}>{loc.detections}</span>
+                    <span style={S.locationDetectionPill}>{loc.detections}</span>
                   </span>
                 </div>
               ))}
-              <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid rgba(27,43,75,0.07)', display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: C.mutedGray }}>
-                <span>Total Locations: {locationDetections.length}</span>
-                <span>Total Reports: {locationDetections.reduce((sum, loc) => sum + loc.reports, 0)}</span>
-                <span>Total Detections: {locationDetections.reduce((sum, loc) => sum + loc.detections, 0)}</span>
+              <div style={S.locationTableFoot}>
+                <span>{locationDetections.length} locations tracked</span>
+                <span>Total reports: {locationDetections.reduce((sum, l) => sum + l.reports, 0)}</span>
+                <span>Total detections: {locationDetections.reduce((sum, l) => sum + l.detections, 0)}</span>
               </div>
             </>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, color: C.mutedGray, gap: 8 }}>
-              <Icon d={ICONS.location} size={36} color={C.mutedGray} strokeWidth={1.2} />
+              <Icon d={ICONS.location} size={32} color={C.mutedGray} strokeWidth={1.2} />
               <span style={{ fontSize: 12 }}>No location data available</span>
             </div>
           )}
         </div>
-      </>
+      </div>
     );
   };
 
-  const renderCollection = () => <Collection barangayFilter={adminRole === 'southadmin' ? 'south_signal' : adminRole === 'centraladmin' ? 'central_signal' : null} />;
-
+  // ==================== MAP ====================
   const renderMap = () => (
     <>
       <SectionHeading>Geographic Heat Map</SectionHeading>
       <div style={S.mapContainer}>
         <div style={S.mapControls}>
-          <button style={S.mapControlBtn}><Icon d={ICONS.layers} size={13} color={C.bodyGray} strokeWidth={2} /> Heat by Weight</button>
+          <button style={S.mapControlBtn}><Icon d={ICONS.layers} size={12} color={C.bodyGray} strokeWidth={2} /> Heat by Weight</button>
         </div>
         <div style={S.mapLegend}>
           <div style={S.mapLegendTitle}>Collection Intensity</div>
@@ -1967,30 +2031,34 @@ const AdminDashboard = () => {
           <div style={S.legendLabels}><span>Low</span><span>Medium</span><span>High</span></div>
         </div>
         <div style={S.locationRanking}>
-          <div style={S.locationRankingTitle}><Icon d={ICONS.trending} size={12} color={C.navyDark} strokeWidth={2} /> Top Collection Areas</div>
+          <div style={S.locationRankingTitle}>
+            <Icon d={ICONS.trending} size={11} color={C.navyDark} strokeWidth={2} /> Top Collection Areas
+          </div>
           {topLocations.slice(0, 5).map((loc, idx) => (
             <div key={idx} style={S.rankingItem}>
               <span style={S.rankingName}>{idx + 1}. {(loc.address || 'Unknown').substring(0, 22)}{(loc.address || '').length > 22 ? '…' : ''}</span>
-              <span style={S.rankingCount}>{loc.count}</span>
+              <span style={S.rankingBadge}>{loc.count}</span>
             </div>
           ))}
         </div>
-        <div style={S.mapInfo}><Icon d={ICONS.location} size={12} color={C.bodyGray} strokeWidth={2} /> {mapLocations.length} active collection points</div>
+        <div style={S.mapInfo}>
+          <Icon d={ICONS.location} size={11} color={C.bodyGray} strokeWidth={2} />
+          {mapLocations.length} active collection points
+        </div>
         <WasteHeatmap locations={mapLocations} topLocations={topLocations} adminRole={adminRole} onLocationClick={(loc) => console.log('Selected:', loc)} />
       </div>
     </>
   );
 
-  const renderHistory = () => <History barangayFilter={adminRole === 'southadmin' ? 'south_signal' : adminRole === 'centraladmin' ? 'central_signal' : null} />;
-
+  // ==================== SECTION ROUTER ====================
   const renderSection = () => {
     switch (activeSection) {
       case 'dashboard':  return renderDashboard();
       case 'analytics':  return renderAnalytics();
-      case 'collection': return renderCollection();
+      case 'collection': return <Collection barangayFilter={adminRole === 'southadmin' ? 'south_signal' : adminRole === 'centraladmin' ? 'central_signal' : null} />;
       case 'map':        return renderMap();
       case 'users':      return <UserManagement barangayFilter={adminRole === 'southadmin' ? 'south_signal' : adminRole === 'centraladmin' ? 'central_signal' : null} adminRole={adminRole} />;
-      case 'history':    return renderHistory();
+      case 'history':    return <History barangayFilter={adminRole === 'southadmin' ? 'south_signal' : adminRole === 'centraladmin' ? 'central_signal' : null} />;
       case 'waste':      return <WasteManagement barangayFilter={adminRole === 'southadmin' ? 'south_signal' : adminRole === 'centraladmin' ? 'central_signal' : null} />;
       case 'messages':   return <Message barangayFilter={adminRole === 'southadmin' ? 'south_signal' : adminRole === 'centraladmin' ? 'central_signal' : null} />;
       case 'posts':      return <Post adminRole={adminRole} currentUser={admin} />;
@@ -2001,10 +2069,11 @@ const AdminDashboard = () => {
 
   const adminInitials = admin?.email ? admin.email.split('@')[0].slice(0, 2).toUpperCase() : 'AD';
 
+  // ==================== RENDER ====================
   return (
     <div style={S.root}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=DM+Sans:wght@300;400;500;600;700;800&display=swap');
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -2015,6 +2084,7 @@ const AdminDashboard = () => {
         .leaflet-popup-tip { display: none; }
       `}</style>
 
+      {/* SIDEBAR */}
       <aside style={S.sidebar}>
         <div style={S.sidebarHeader}>
           <div style={S.logoWrap}>
@@ -2036,9 +2106,8 @@ const AdminDashboard = () => {
                   <div key={item.id} style={S.navItem(activeSection === item.id)}
                     onClick={() => setActiveSection(item.id)}
                     onMouseEnter={e => { if (activeSection !== item.id) e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
-                    onMouseLeave={e => { if (activeSection !== item.id) e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; }}
-                  >
-                    <Icon d={item.icon} size={14} color={activeSection === item.id ? C.accent : 'rgba(255,255,255,0.38)'} strokeWidth={activeSection === item.id ? 2.2 : 1.8} />
+                    onMouseLeave={e => { if (activeSection !== item.id) e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; }}>
+                    <Icon d={item.icon} size={14} color={activeSection === item.id ? C.accent : 'rgba(255,255,255,0.36)'} strokeWidth={activeSection === item.id ? 2.2 : 1.8} />
                     <span>{item.label}</span>
                   </div>
                 ))}
@@ -2049,8 +2118,7 @@ const AdminDashboard = () => {
         <div style={S.sidebarFooter}>
           <div style={S.adminMini} onClick={() => setActiveSection('profile')}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-          >
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}>
             <div style={S.avatar}>
               {admin?.profile
                 ? <img src={admin.profile} alt="Admin" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -2062,17 +2130,17 @@ const AdminDashboard = () => {
                 {adminRole === 'southadmin' ? 'South Signal Admin' : adminRole === 'centraladmin' ? 'Central Signal Admin' : 'Super Admin'}
               </div>
             </div>
-            <Icon d={ICONS.profile} size={13} color="rgba(255,255,255,0.25)" strokeWidth={1.8} />
+            <Icon d={ICONS.profile} size={12} color="rgba(255,255,255,0.22)" strokeWidth={1.8} />
           </div>
           <button style={S.logoutBtn} onClick={() => setShowLogoutConfirm(true)}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(244,67,54,0.13)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,67,54,0.07)'; }}
-          >
-            <Icon d={ICONS.logout} size={13} color="currentColor" strokeWidth={2} />Sign Out
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.13)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; }}>
+            <Icon d={ICONS.logout} size={12} color="currentColor" strokeWidth={2} />Sign Out
           </button>
         </div>
       </aside>
 
+      {/* MAIN */}
       <main style={S.main}>
         <div style={S.topbar}>
           <div>
@@ -2080,17 +2148,17 @@ const AdminDashboard = () => {
             <p style={S.pageSub}>{pageTitles[activeSection]?.sub}</p>
           </div>
           <div style={S.dateChip}>
-            <Icon d={ICONS.calendar} size={13} color={C.bodyGray} strokeWidth={1.8} />
-            {new Date().toLocaleDateString('US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}
+            <Icon d={ICONS.calendar} size={12} color={C.bodyGray} strokeWidth={1.8} />
+            {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </div>
 
         {error && (
           <div style={S.errorBar}>
-            <Icon d={ICONS.alert} size={15} color={C.danger} strokeWidth={2} />
+            <Icon d={ICONS.alert} size={14} color={C.danger} strokeWidth={2} />
             <span>{error}</span>
             <button style={S.errClose} onClick={() => setError(null)}>
-              <Icon d={ICONS.close} size={15} color={C.danger} strokeWidth={2} />
+              <Icon d={ICONS.close} size={14} color={C.danger} strokeWidth={2} />
             </button>
           </div>
         )}
@@ -2098,20 +2166,21 @@ const AdminDashboard = () => {
         <div style={S.content}>{renderSection()}</div>
       </main>
 
+      {/* LOGOUT CONFIRM */}
       {showLogoutConfirm && (
         <div style={S.overlay} onClick={() => setShowLogoutConfirm(false)}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#FFEBEE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Icon d={ICONS.logout} size={18} color={C.danger} strokeWidth={2} />
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon d={ICONS.logout} size={17} color={C.danger} strokeWidth={2} />
               </div>
               <h3 style={S.modalTitle}>Confirm Sign Out</h3>
             </div>
-            <p style={S.modalDesc}>Are you sure you want to sign out from TMFK Waste Innovations Admin Panel?</p>
+            <p style={S.modalDesc}>Are you sure you want to sign out from the TMFK Waste Innovations Admin Panel?</p>
             <div style={S.modalActions}>
               <button style={S.btnSecondary} onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
               <button style={S.btnDanger} onClick={handleLogout}>
-                <Icon d={ICONS.logout} size={14} color={C.white} strokeWidth={2.2} />Sign Out
+                <Icon d={ICONS.logout} size={13} color={C.cardBg} strokeWidth={2.2} />Sign Out
               </button>
             </div>
           </div>
